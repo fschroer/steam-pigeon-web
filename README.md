@@ -20,22 +20,35 @@ npm run build                # type-check + production build into dist/
 
 ## One-time Firebase setup
 
-1. **Register a web app.** Firebase console → Project settings → General → *Add app* →
-   Web. Copy `apiKey` and `appId` from its config into `.env.local`. Hosting does not need
-   to be set up from that screen; `firebase.json` here does it.
-2. **Allow the browser to read Storage (CORS).** Once, from any machine with the Google
-   Cloud SDK:
+Each step names where it is done.
+
+1. **Register a web app** — *Firebase console* → Project settings → General → *Add app*
+   → Web. The "Also set up Firebase Hosting" box is optional; the first deploy creates the
+   site either way. Copy `apiKey` and `appId` from its config into `.env.local`.
+2. **Let the browser read Storage (CORS)** — *Google Cloud Shell*: console.cloud.google.com,
+   project `steam-pigeon`, the `>_` icon at the top right. Upload `cors.json` (or recreate
+   it there), then:
    ```sh
    gcloud storage buckets update gs://steam-pigeon.firebasestorage.app --cors-file=cors.json
+   gcloud storage buckets describe gs://steam-pigeon.firebasestorage.app --format="default(cors_config)"
    ```
-   (`gsutil cors set cors.json gs://steam-pigeon.firebasestorage.app` does the same.)
    Without this, sign-in works but every flight fails to load.
-3. **Authorized domains.** `steam-pigeon.web.app`, `steam-pigeon.firebaseapp.com` and
-   `localhost` are on Authentication → Settings → Authorized domains by default. A custom
-   domain would have to be added there and to `cors.json`.
-4. **Firebase CLI.** `npm install -g firebase-tools`, then `firebase login`.
+3. **Check authorized domains** — *Firebase console* → Authentication → Settings →
+   Authorized domains. `steam-pigeon.web.app`, `steam-pigeon.firebaseapp.com` and
+   `localhost` are there by default; only a custom domain has to be added.
+4. **Firebase CLI** — *a terminal on your PC* (Node.js 22+):
+   `npm install -g firebase-tools`, then `firebase login`.
+
+### A custom domain
+
+After the first deploy: *Firebase console* → Hosting → *Add custom domain*, and add the
+DNS records it shows at your registrar. Then add the domain to Authorized domains (step 3)
+and its `https://` origin to `cors.json`, and rerun step 2. `authDomain` can stay
+`steam-pigeon.firebaseapp.com`, because sign-in uses a popup.
 
 ## Deploy
+
+From the repo, in the same terminal as step 4:
 
 ```sh
 npm run deploy   # build, then: firebase deploy --only hosting,storage
