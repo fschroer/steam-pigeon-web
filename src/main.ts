@@ -236,7 +236,9 @@ async function flightView(locatorId: string, id: string) {
   }
   const kmlButton = h('button', { type: 'button', disabled: true }, 'Google Earth (.kml)');
   kmlButton.title = 'The flight path in 3D, for Google Earth: open the file, or File → Import in earth.google.com';
-  if (rec.csvPath) actions.append(kmlButton);
+  const tourButton = h('button', { type: 'button', disabled: true }, 'Fly-around (.kml, Earth Pro)');
+  tourButton.title = 'The same flight plus a tour that circles it. Google Earth Pro only: double-click "Fly around" in Places. Earth on the web does not play tours.';
+  if (rec.csvPath) actions.append(kmlButton, tourButton);
 
   const del = h('button', { type: 'button', class: 'danger' }, 'Delete flight');
   del.addEventListener('click', async () => {
@@ -280,19 +282,23 @@ async function flightView(locatorId: string, id: string) {
   const t = table;
   const path = flightPath(t);
   if (path.length >= 2) {
-    kmlButton.disabled = false;
-    kmlButton.addEventListener('click', () => {
+    const save = (tour: boolean) => {
       const time = column(t, 'time_ms')!.map((v) => (v === null ? null : v / 1000));
       const state = column(t, 'flight_state');
       const name = `${locatorLabel(locatorId, rec.locatorName)}, ${formatRecordTime(rec.recordTs)}`;
-      const kml = buildKml(name, path, state ? stateChanges(time, state) : []);
+      const kml = buildKml(name, path, state ? stateChanges(time, state) : [], { tour });
       const url = URL.createObjectURL(new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' }));
-      const a = h('a', { href: url, download: csvFileName(rec).replace(/\.csv$/, '.kml') });
+      const file = csvFileName(rec).replace(/\.csv$/, tour ? '_flyaround.kml' : '.kml');
+      const a = h('a', { href: url, download: file });
       document.body.append(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    });
+    };
+    kmlButton.disabled = false;
+    tourButton.disabled = false;
+    kmlButton.addEventListener('click', () => save(false));
+    tourButton.addEventListener('click', () => save(true));
   } else {
-    kmlButton.title = 'This flight has no GPS fixes, so there is no path to show.';
+    kmlButton.title = tourButton.title = 'This flight has no GPS fixes, so there is no path to show.';
   }
   renderCharts(body, t);
 }

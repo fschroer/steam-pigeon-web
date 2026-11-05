@@ -64,9 +64,14 @@ describe('fly-around tour', () => {
     expect(o.range).toBeGreaterThanOrEqual(600 * 1.8);
   });
 
+  it('stays out of the plain file, which Google Earth on the web rejects if it has one', () => {
+    const kml = buildKml('x', path, []);
+    expect(kml).not.toContain('gx:');
+  });
+
   it('circles once: a heading every 10 degrees, ending back at north', async () => {
     const { ORBIT_STEPS } = await import('../src/kml');
-    const kml = buildKml('x', path, []);
+    const kml = buildKml('x', path, [], { tour: true });
     expect(kml).toContain('xmlns:gx="http://www.google.com/kml/ext/2.2"');
     expect(kml).toContain('<name>Fly around</name>');
     const headings = [...kml.matchAll(/<gx:FlyTo>.*?<heading>([\d.]+)<\/heading>/g)].map((m) => Number(m[1]));
@@ -76,6 +81,6 @@ describe('fly-around tour', () => {
   });
 
   it('has no tour without a path', () => {
-    expect(buildKml('x', [], [])).not.toContain('gx:Tour');
+    expect(buildKml('x', [], [], { tour: true })).not.toContain('gx:Tour');
   });
 });

@@ -102,7 +102,8 @@ function lookAt(o: Orbit, heading: number): string {
 /**
  * A gx:Tour that circles the flight once, always pointing at its center.
  * Google Earth Pro plays it from the Places panel (double-click "Fly around").
- * Support for KML tours in Google Earth on the web is not verified here.
+ * Google Earth on the web refuses the whole file ("Unsupported element: gx:Tour",
+ * seen 2026-11-05), so the tour goes only in its own file (buildKml tour: true).
  */
 function tour(o: Orbit): string {
   const step = ORBIT_SECONDS / ORBIT_STEPS;
@@ -119,8 +120,13 @@ ${legs.join('\n')}
     </gx:Tour>`;
 }
 
-export function buildKml(name: string, path: PathPoint[], events: PathEvent[]): string {
+/**
+ * The flight as KML. With [opts.tour] the file also carries the fly-around, for
+ * Google Earth Pro only; without it the file opens anywhere, Earth on the web included.
+ */
+export function buildKml(name: string, path: PathPoint[], events: PathEvent[], opts: { tour?: boolean } = {}): string {
   const orbit = orbitFor(path);
+  const withTour = Boolean(opts.tour && orbit);
   const placemarks = events.map((e) => {
     const p = nearest(path, e.t);
     if (!p) return '';
@@ -133,7 +139,7 @@ export function buildKml(name: string, path: PathPoint[], events: PathEvent[]): 
   }).filter(Boolean).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+<kml xmlns="http://www.opengis.net/kml/2.2"${withTour ? ' xmlns:gx="http://www.google.com/kml/ext/2.2"' : ''}>
   <Document>
     <name>${esc(name)}</name>
     <open>1</open>${orbit ? `\n    ${lookAt(orbit, 0)}` : ''}
@@ -158,7 +164,7 @@ ${path.map((p) => `          ${coord(p)}`).join('\n')}
       </LineString>
     </Placemark>
 ${placemarks}
-${orbit ? tour(orbit) : ''}
+${withTour && orbit ? tour(orbit) : ''}
   </Document>
 </kml>
 `;
