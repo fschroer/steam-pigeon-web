@@ -116,7 +116,9 @@ label.check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem
 .uplot .u-legend th { color: var(--text-secondary); }
 .uplot .u-legend td, .uplot .u-legend th { border: none; padding: 0.1rem 0.4rem; background: none; }
 .uplot .u-legend table { background: none; width: auto; }
-.u-select { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+/* .uplot raises specificity: uPlot.min.css loads after this file, and its own
+   7% black selection box is invisible on the dark theme. */
+.uplot .u-select { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 
 .view3d { margin: 1rem 0; }
 .map3d {
