@@ -27,6 +27,8 @@ sharing by link).
 - **Shared names copied by hand:** `src/channels.ts` `FLIGHT_STATES` mirrors the locator's
   `FlightStates` (`Rocket/Common/Inc/Types.hpp`), and `test/csv.test.ts` holds a copy of the
   export header (`FullRecordCsv.HEADER` in the Android app). Change them with their source.
+- **The 3D view is billed per map load** (Google "Immersive Maps" SKU). It must stay
+  behind an explicit click; never load the map on page open or on a hidden tab.
 - **Charts:** one unit per panel, never a dual axis. A series' color is fixed by its slot
   in its panel, so it never changes with what else is selected.
 

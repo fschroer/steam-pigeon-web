@@ -40,6 +40,29 @@ Each step names where it is done.
 4. **Firebase CLI** — *a terminal on your PC* (Node.js 22+):
    `npm install -g firebase-tools`, then `firebase login`.
 
+### Optional: the in-page 3D view
+
+The flight page can show the flight on Google's photorealistic 3D map, with an
+angled view and a fly-around. It needs a Google Maps Platform key; without one the
+3D section just says it is unavailable. In the *Google Cloud console*
+(console.cloud.google.com, project `steam-pigeon`, which already has billing because
+Firebase is on Blaze):
+
+1. APIs & Services → Library → enable **Maps JavaScript API**.
+2. APIs & Services → Credentials → *Create credentials* → API key. Edit the key:
+   - Application restrictions → **Websites**: `https://steam-pigeon.web.app/*`,
+     `https://steam-pigeon.firebaseapp.com/*`, `http://localhost:5173/*` (and a
+     custom domain, if any).
+   - API restrictions → **Restrict key** → Maps JavaScript API only.
+3. Put it in `.env.local` as `VITE_GOOGLE_MAPS_API_KEY=…`, then `npm run dev` or
+   `npm run deploy`.
+4. Recommended: Billing → Budgets & alerts, a small monthly budget with an email alert.
+
+Each "Show 3D view" click is one billed map load ("Immersive Maps" SKU: 5,000 free
+a month as of 2026-11; then about $7 per 1,000). The map never loads on its own.
+The key ends up in the public site bundle, as every browser Maps key does; the
+website and API restrictions above are what protect it.
+
 ### A custom domain
 
 After the first deploy: *Firebase console* → Hosting → *Add custom domain*, and add the

@@ -117,3 +117,9 @@ label.check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem
 .uplot .u-legend td, .uplot .u-legend th { border: none; padding: 0.1rem 0.4rem; background: none; }
 .uplot .u-legend table { background: none; width: auto; }
 .u-select { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+
+.view3d { margin: 1rem 0; }
+.map3d {
+  width: 100%; height: min(70vh, 560px); border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--border); background: var(--surface-1);
+}

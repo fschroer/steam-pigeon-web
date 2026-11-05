@@ -6,6 +6,8 @@ import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord
 import { formatRecordTime, recordId, csvFileName, locatorLabel } from './records';
 import { parseFlightCsv, column, stateChanges, type FlightTable } from './csv';
 import { flightPath, buildKml } from './kml';
+import { MAPS_KEY, padElevationM, flightCamera, showFlight3D } from './map3d';
+import { seriesColor } from './chart';
 import { h, type Child } from './dom';
 import { renderCharts, disposeCharts } from './flight';
 
@@ -295,7 +297,53 @@ async function flightView(locatorId: string, id: string) {
   } else {
     kmlButton.title = 'This flight has no GPS fixes, so there is no path to show.';
   }
+  body.append(view3d(t, path));
   renderCharts(body, t);
+}
+
+/**
+ * The in-page 3D view (ADR-0042 amendment). Each map load is billed, so the map
+ * is built only when asked for, never on opening the page.
+ */
+function view3d(t: FlightTable, path: ReturnType<typeof flightPath>): HTMLElement {
+  const section = h('section', { class: 'view3d' }, h('h2', {}, '3D view'));
+  if (path.length < 2) {
+    section.append(h('p', { class: 'muted' }, 'This flight has no GPS fixes, so there is no path to show.'));
+    return section;
+  }
+  if (!MAPS_KEY) {
+    section.append(h('p', { class: 'muted' },
+      'Not available in this build: add VITE_GOOGLE_MAPS_API_KEY to .env.local (see the README).'));
+    return section;
+  }
+  const camera = flightCamera(path, padElevationM(t))!;
+  const time = column(t, 'time_ms')!.map((v) => (v === null ? null : v / 1000));
+  const state = column(t, 'flight_state');
+  const events = state ? stateChanges(time, state) : [];
+
+  const host = h('div', { class: 'map3d' });
+  const controls = h('div', { class: 'actions' });
+  const show = h('button', { type: 'button', class: 'primary' }, 'Show 3D view');
+  controls.append(show);
+  section.append(controls);
+  show.addEventListener('click', async () => {
+    show.disabled = true; show.textContent = 'Loading 3D map…';
+    section.append(host);
+    try {
+      const v = await showFlight3D(host, path, events, camera, seriesColor(0));
+      const fly = h('button', { type: 'button', class: 'primary' }, 'Fly around');
+      fly.title = 'One slow circle around the flight. Click the map to stop.';
+      fly.addEventListener('click', () => v.flyAround());
+      const reset = h('button', { type: 'button' }, 'Reset view');
+      reset.addEventListener('click', () => v.resetView());
+      controls.replaceChildren(fly, reset);
+    } catch (err) {
+      host.remove();
+      show.disabled = false; show.textContent = 'Show 3D view';
+      section.append(errorBox(`The 3D map did not load: ${(err as Error).message}`));
+    }
+  });
+  return section;
 }
 
 // ---- routing ----------------------------------------------------------------------------
