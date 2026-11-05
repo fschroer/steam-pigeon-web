@@ -78,6 +78,32 @@ export function panelChart(host: HTMLElement, input: PanelChartInput): uPlot {
       })),
     ],
     hooks: {
+      // Event names on hover: the dashed line under the cursor (within 6 px) is
+      // named in a tooltip on every panel, including labels the top panel had
+      // to skip because they would have overlapped.
+      setCursor: [
+        (u) => {
+          const tip = (u as uPlot & { _tip?: HTMLElement })._tip;
+          if (!tip) return;
+          const left = u.cursor.left ?? -1;
+          let hit: StateChange | undefined;
+          let best = 7;
+          if (left >= 0) {
+            for (const m of markers) {
+              const d = Math.abs(u.valToPos(m.t, 'x') - left);
+              if (d < best) { best = d; hit = m; }
+            }
+          }
+          if (!hit) { tip.style.display = 'none'; return; }
+          tip.textContent = `${flightStateName(hit.state)} · ${hit.t.toFixed(2)} s`;
+          tip.style.display = 'block';
+          const x = u.valToPos(hit.t, 'x');
+          const w = tip.offsetWidth;
+          const room = u.over.clientWidth;
+          tip.style.left = `${Math.min(Math.max(0, x + 8), Math.max(0, room - w))}px`;
+          tip.style.top = `${Math.max(0, (u.cursor.top ?? 0) - 28)}px`;
+        },
+      ],
       setScale: [
         (u, key) => {
           if (key !== 'x' || !onZoom) return;
@@ -123,6 +149,11 @@ export function panelChart(host: HTMLElement, input: PanelChartInput): uPlot {
 
   const data: uPlot.AlignedData = [x, ...series.map((s) => s.data)] as uPlot.AlignedData;
   const u = new uPlot(opts, data, host);
+  const tip = document.createElement('div');
+  tip.className = 'event-tip';
+  tip.style.display = 'none';
+  u.over.append(tip);
+  (u as uPlot & { _tip?: HTMLElement })._tip = tip;
   const ro = new ResizeObserver(() => u.setSize({ width: Math.max(280, host.clientWidth), height: 220 }));
   ro.observe(host);
   (u as uPlot & { _ro?: ResizeObserver })._ro = ro;
