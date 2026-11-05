@@ -75,39 +75,10 @@ describe('buildKml', () => {
   });
 });
 
-describe('fly-around tour', () => {
-  const path = [
-    { t: 0, lat: 37.0, lon: -122.0, agl: 0 },
-    { t: 10, lat: 37.001, lon: -122.0, agl: 600 },
-    { t: 60, lat: 37.002, lon: -121.998, agl: 0 },
-  ];
-
-  it('aims at the middle of the flight and stands back far enough to frame it', async () => {
-    const { orbitFor } = await import('../src/kml');
-    const o = orbitFor(path)!;
-    expect(o.lat).toBeCloseTo(37.001, 6);
-    expect(o.lon).toBeCloseTo(-121.999, 6);
-    expect(o.alt).toBe(300);
-    expect(o.range).toBeGreaterThanOrEqual(600 * 1.8);
-  });
-
-  it('stays out of the plain file, which Google Earth on the web rejects if it has one', () => {
-    const kml = buildKml('x', path, []);
+describe('plain KML', () => {
+  it('has no gx: extensions and sets no camera, so it opens in Google Earth on the web', () => {
+    const kml = buildKml('x', [{ t: 0, lat: 37, lon: -122, agl: 0 }, { t: 1, lat: 37.001, lon: -122, agl: 10 }], []);
     expect(kml).not.toContain('gx:');
-  });
-
-  it('circles once: a heading every 10 degrees, ending back at north', async () => {
-    const { ORBIT_STEPS } = await import('../src/kml');
-    const kml = buildKml('x', path, [], { tour: true });
-    expect(kml).toContain('xmlns:gx="http://www.google.com/kml/ext/2.2"');
-    expect(kml).toContain('<name>Fly around</name>');
-    const headings = [...kml.matchAll(/<gx:FlyTo>.*?<heading>([\d.]+)<\/heading>/g)].map((m) => Number(m[1]));
-    expect(headings.length).toBe(ORBIT_STEPS + 1);
-    expect(headings[1]).toBe(10);
-    expect(headings[headings.length - 1]).toBe(360);
-  });
-
-  it('has no tour without a path', () => {
-    expect(buildKml('x', [], [], { tour: true })).not.toContain('gx:Tour');
+    expect(kml).not.toContain('<LookAt>');
   });
 });
