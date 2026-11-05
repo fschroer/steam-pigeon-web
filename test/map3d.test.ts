@@ -65,7 +65,7 @@ describe('hoverPoints', () => {
     Array.from({ length: n }, (_, i) => ({ t: i * dt, lat: 37, lon: -122, agl: i }));
 
   it('spaces points at least a second apart and keeps the last', () => {
-    const h = hoverPoints(pts(101, 0.1));          // 10 s at 10 Hz
+    const h = hoverPoints(pts(101, 0.1), 1);       // 10 s at 10 Hz
     expect(h.map((p) => p.t)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((v) => expect.closeTo(v, 6)));
   });
 

@@ -104,7 +104,7 @@ export function flightCamera(path: PathPoint[], padMslM: number | undefined, asp
  * So small markers sit along the line, at least [minGapS] apart and at most
  * [max] of them, the last point always included.
  */
-export function hoverPoints(path: PathPoint[], minGapS = 1, max = 400): PathPoint[] {
+export function hoverPoints(path: PathPoint[], minGapS = 0.1, max = 2500): PathPoint[] {
   if (!path.length) return [];
   const span = path[path.length - 1].t - path[0].t;
   const gap = Math.max(minGapS, span / Math.max(1, max - 1));
@@ -124,10 +124,11 @@ export function readoutText(p: PathPoint): string {
   return `${p.t.toFixed(1)} s · ${p.agl.toFixed(0)} m AGL`;
 }
 
-/** A hover point's dot: the path's orange, a little wider than the line. */
+/** A hover point's dot: the path's solid orange, about the line's width, so it blends in. */
+export const HOVER_DOT_PX = 5;
 export function hoverDotSvg(): string {
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8">' +
-    '<circle cx="4" cy="4" r="3.5" fill="#ff6600" fill-opacity="0.85"/></svg>';
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="5" height="5" viewBox="0 0 5 5">' +
+    '<circle cx="2.5" cy="2.5" r="2.5" fill="#ff6600"/></svg>';
 }
 
 /** The event pin: a small orange-ringed dot, in place of the default red map pin. */
@@ -200,7 +201,7 @@ export async function showFlight3D(host: HTMLElement, path: PathPoint[], events:
       });
       const tpl = document.createElement('template');
       const img = document.createElement('img');
-      img.src = dot; img.width = 8; img.height = 8;
+      img.src = dot; img.width = HOVER_DOT_PX; img.height = HOVER_DOT_PX;
       tpl.content.append(img);
       m.append(tpl);
       m.addEventListener('gmp-pointerover', () => { readout.textContent = readoutText(p); readout.hidden = false; });
