@@ -1,4 +1,4 @@
-import { getStorage, ref, listAll, getMetadata, getBlob, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, listAll, getMetadata, getBlob, getDownloadURL, deleteObject } from 'firebase/storage';
 import { app } from './firebase';
 import { groupRecords, recordsPrefix, type RecordRef } from './records';
 
@@ -50,4 +50,21 @@ export async function fetchBlob(path: string): Promise<Blob> {
  */
 export async function shareLink(path: string): Promise<string> {
   return getDownloadURL(ref(storage(), path));
+}
+
+/**
+ * Removes the record's .csv and .bin from the web store. The phone keeps its
+ * own copy and marks it uploaded, so the app does not put it back; the locator
+ * keeps its copy in flash (ADR-0042 amendment, 2026-11-05).
+ */
+export async function deleteRecord(r: RecordRef): Promise<void> {
+  for (const path of [r.csvPath, r.binPath]) {
+    if (!path) continue;
+    try {
+      await deleteObject(ref(storage(), path));
+    } catch (e) {
+      // Already gone (deleted from another tab) is the outcome we wanted.
+      if ((e as { code?: string })?.code !== 'storage/object-not-found') throw e;
+    }
+  }
 }

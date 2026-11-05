@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --surface-0: #f4f4f2;
   --surface-1: #fcfcfb;
   --text-primary: #0b0b0b;
@@ -12,6 +13,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --surface-0: #121211;
     --surface-1: #1a1a19;
     --text-primary: #f0efec;
@@ -25,6 +27,7 @@
   }
 }
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --surface-0: #121211;
   --surface-1: #1a1a19;
   --text-primary: #f0efec;
@@ -53,6 +56,7 @@ h2 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
   padding: 0.75rem 16px; border-bottom: 1px solid var(--border); background: var(--surface-1);
 }
 .brand { font-weight: 600; color: var(--text-primary); text-decoration: none; }
+.top-right { display: flex; gap: 1rem; align-items: center; min-width: 0; }
 #who { display: flex; gap: 0.75rem; align-items: center; min-width: 0; }
 #who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -81,6 +85,7 @@ button {
 button:disabled { opacity: 0.6; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 button.google { width: 100%; }
+button.danger { color: var(--error); border-color: var(--error); background: none; margin-left: auto; }
 button.link { border: none; background: none; color: var(--accent); padding: 0.25rem 0; }
 .status { min-height: 1.4em; color: var(--text-secondary); }
 

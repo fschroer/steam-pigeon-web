@@ -3,7 +3,8 @@
 A browser view of the flights the Steam Pigeon app uploads to Firebase. Sign in with the
 same Google or email account you use in the app to list your locators' records, chart any
 channel against time with the flight events marked, download the full CSV (identical to
-the locator's USB export) or the raw record, and copy a share link.
+the locator's USB export) or the raw record, download the flight path as KML for Google
+Earth, copy a share link, or delete a flight from the web store. Dark theme by default.
 
 Design: ADR "Flyers read their flights in a browser" in `fschroer/steam-pigeon-locator`
 (`docs/adr/0042-flight-data-web-ui.md`).

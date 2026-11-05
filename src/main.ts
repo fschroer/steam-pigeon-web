@@ -2,14 +2,45 @@ import './style.css';
 import type { User } from 'firebase/auth';
 import { configured } from './firebase';
 import { watchUser, signInGoogle, signInEmail, resetPassword, signOut, authMessage } from './auth';
-import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, type RecordInfo } from './store';
+import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, type RecordInfo } from './store';
 import { formatRecordTime, recordId, csvFileName } from './records';
-import { parseFlightCsv, type FlightTable } from './csv';
+import { parseFlightCsv, column, stateChanges, type FlightTable } from './csv';
+import { flightPath, buildKml } from './kml';
 import { h, type Child } from './dom';
 import { renderCharts, disposeCharts } from './flight';
 
 const root = document.getElementById('app')!;
 const who = document.getElementById('who')!;
+
+// ---- theme: dark by default, then light, then follow the system ----------------------
+
+const THEMES = ['dark', 'light', 'system'] as const;
+type Theme = typeof THEMES[number];
+const themeButton = document.getElementById('theme') as HTMLButtonElement;
+
+function currentTheme(): Theme {
+  try {
+    const t = localStorage.getItem('sp.theme');
+    if (t === 'light' || t === 'system') return t;
+  } catch { /* storage blocked */ }
+  return 'dark';
+}
+
+function applyTheme(t: Theme) {
+  if (t === 'system') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = t;
+  const label = { dark: 'Dark', light: 'Light', system: 'System' }[t];
+  themeButton.textContent = `Theme: ${label}`;
+  themeButton.title = 'Switch between dark, light and your system setting';
+}
+
+themeButton.addEventListener('click', () => {
+  const next = THEMES[(THEMES.indexOf(currentTheme()) + 1) % THEMES.length];
+  try { localStorage.setItem('sp.theme', next); } catch { /* the choice lasts this page only */ }
+  applyTheme(next);
+  route();   // the charts take their colors when drawn
+});
+applyTheme(currentTheme());
 
 function show(...nodes: Child[]) {
   disposeCharts();
@@ -185,6 +216,29 @@ async function flightView(locatorId: string, id: string) {
     });
     actions.append(b);
   }
+  const kmlButton = h('button', { type: 'button', disabled: true }, 'Google Earth (.kml)');
+  kmlButton.title = 'The flight path in 3D, for Google Earth: open the file, or File → Import in earth.google.com';
+  if (rec.csvPath) actions.append(kmlButton);
+
+  const del = h('button', { type: 'button', class: 'danger' }, 'Delete flight');
+  del.addEventListener('click', async () => {
+    const ok = confirm(
+      `Delete the ${formatRecordTime(rec.recordTs)} flight from locator ${locatorId} from the web store?\n\n` +
+      'This removes its CSV and raw file here and breaks any share link to it. ' +
+      'The copy on your phone and the one in the locator are not touched. This cannot be undone.');
+    if (!ok) return;
+    del.disabled = true; del.textContent = 'Deleting…';
+    try {
+      await deleteRecord(rec);
+      flights = null;
+      if (rec.csvPath) tableCache.delete(rec.csvPath);
+      location.hash = '#/';
+    } catch (err) {
+      alert(`Delete failed: ${(err as Error).message}`);
+      del.disabled = false; del.textContent = 'Delete flight';
+    }
+  });
+  actions.append(del);
   body.replaceChildren(title, sub, actions);
 
   if (!rec.csvPath) {
@@ -205,7 +259,24 @@ async function flightView(locatorId: string, id: string) {
     return;
   }
   loading.remove();
-  renderCharts(body, table);
+  const t = table;
+  const path = flightPath(t);
+  if (path.length >= 2) {
+    kmlButton.disabled = false;
+    kmlButton.addEventListener('click', () => {
+      const time = column(t, 'time_ms')!.map((v) => (v === null ? null : v / 1000));
+      const state = column(t, 'flight_state');
+      const name = `Locator ${locatorId}, ${formatRecordTime(rec.recordTs)}`;
+      const kml = buildKml(name, path, state ? stateChanges(time, state) : []);
+      const url = URL.createObjectURL(new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' }));
+      const a = h('a', { href: url, download: csvFileName(rec).replace(/\.csv$/, '.kml') });
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    });
+  } else {
+    kmlButton.title = 'This flight has no GPS fixes, so there is no path to show.';
+  }
+  renderCharts(body, t);
 }
 
 // ---- routing ----------------------------------------------------------------------------
