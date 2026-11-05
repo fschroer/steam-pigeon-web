@@ -16,6 +16,9 @@
 // descent fix needs no more than LANDING_MAX_SPEED_MPS (plus GPS slack). A real
 // fix after a radio dropout passes; a jump of hundreds of meters in a tenth of
 // a second does not.
+//
+// Height: see heightColumn, which falls back to raw baro when fusion is missing
+// or ran away.
 
 import { column, type FlightTable } from './csv';
 import { flightStateName } from './channels';
@@ -41,16 +44,34 @@ export function groundDistanceM(a: { lat: number; lon: number }, b: { lat: numbe
 
 /**
  * The height above ground to draw: fused_agl_m, unless the record has no real
- * fused solution. Older exports, and records whose fusion never ran, carry the
- * column as blanks or as 0.00 (the export prints a NaN as 0.00), and drawing
- * that would flatten the flight onto the ground. Then raw_baro_agl_m is used.
+ * fused solution or the fusion ran away. Raw baro is used instead when:
+ * - fused peaks under 1 m: older exports, and records whose fusion never ran,
+ *   carry the column as blanks or as 0.00 (the export prints a NaN as 0.00);
+ * - fused strays from raw baro by more than FUSED_MAX_STRAY_M or half the raw
+ *   apogee, whichever is more. Fusion is still being vetted (ADR "Retire the EKF from
+ *   the real-time path"), and a diverged record carries a fused height that climbs
+ *   to tens of km while the rocket descends (Red Ryder, 2026-09-26: 31 km at
+ *   landing, raw baro 1,432 m apogee). A healthy fused track stays within tens
+ *   of meters of raw, so this only catches a runaway.
  */
+const FUSED_MAX_STRAY_M = 150;
+
 export function heightColumn(table: FlightTable): (number | null)[] | undefined {
   const fused = column(table, 'fused_agl_m');
   const raw = column(table, 'raw_baro_agl_m');
   const peak = (c?: (number | null)[]) => (c ?? []).reduce<number>((m, v) => (v !== null && v > m ? v : m), 0);
-  if (fused && peak(fused) >= 1) return fused;
-  if (raw && peak(raw) >= 1) return raw;
+  const rawOk = !!raw && peak(raw) >= 1;
+  if (fused && peak(fused) >= 1) {
+    if (!rawOk) return fused;
+    let stray = 0;
+    for (let i = 0; i < table.rows; i++) {
+      const f = fused[i], r = raw![i];
+      if (f !== null && r !== null) stray = Math.max(stray, Math.abs(f - r));
+    }
+    if (stray <= Math.max(FUSED_MAX_STRAY_M, peak(raw) / 2)) return fused;
+    return raw;
+  }
+  if (rawOk) return raw;
   return fused ?? raw;
 }
 

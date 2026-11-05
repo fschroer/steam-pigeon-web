@@ -34,6 +34,30 @@ describe('flightPath', () => {
     expect(flightPath(t).map((p) => p.agl)).toEqual([0, 250, 600]);
   });
 
+  it('falls back to raw baro height when the fused height ran away', () => {
+    const t = table({
+      time_ms:        [0,      1000,   2000,   3000],
+      lat_deg:        [37.0,   37.001, 37.002, 37.003],
+      lon_deg:        [-122,   -122,   -122,   -122],
+      fused_agl_m:    [0,      550,    9000,   31000],
+      raw_baro_agl_m: [0,      120,    1400,   5],
+      fix_type:       [3,      3,      3,      3],
+    });
+    expect(flightPath(t).map((p) => p.agl)).toEqual([0, 120, 1400, 5]);
+  });
+
+  it('keeps a fused height that tracks raw baro', () => {
+    const t = table({
+      time_ms:        [0,      1000,   2000],
+      lat_deg:        [37.0,   37.001, 37.002],
+      lon_deg:        [-122,   -122,   -122],
+      fused_agl_m:    [0,      280,    640],
+      raw_baro_agl_m: [0,      250,    600],
+      fix_type:       [3,      3,      3],
+    });
+    expect(flightPath(t).map((p) => p.agl)).toEqual([0, 280, 640]);
+  });
+
   it('is empty without position columns', () => {
     expect(flightPath(table({ time_ms: [0, 1] }))).toEqual([]);
   });
