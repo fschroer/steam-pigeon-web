@@ -134,7 +134,7 @@ async function listView() {
     return;
   }
   if (flights.size === 0) {
-    body.replaceChildren(h('p', {}, 'No flights yet. Records appear here after the app downloads them from a locator and uploads them while you are signed in.'));
+    body.replaceChildren(h('p', {}, 'No flights yet. Records appear here after the app downloads them from a locator and uploads them while you are signed in.'), openLocalSection());
     return;
   }
   body.replaceChildren();
@@ -175,6 +175,7 @@ async function listView() {
       ),
     ));
   }
+  body.append(openLocalSection());
 }
 
 async function download(path: string, name: string, btn: HTMLButtonElement) {
@@ -280,22 +281,9 @@ async function flightView(locatorId: string, id: string) {
   loading.remove();
   const t = table;
   const path = flightPath(t);
-  if (path.length >= 2) {
-    kmlButton.disabled = false;
-    kmlButton.addEventListener('click', () => {
-      const time = column(t, 'time_ms')!.map((v) => (v === null ? null : v / 1000));
-      const state = column(t, 'flight_state');
-      const name = `${locatorLabel(locatorId, rec.locatorName)}, ${formatRecordTime(rec.recordTs)}`;
-      const kml = buildKml(name, path, state ? stateChanges(time, state) : []);
-      const url = URL.createObjectURL(new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' }));
-      const file = csvFileName(rec).replace(/\.csv$/, '.kml');
-      const a = h('a', { href: url, download: file });
-      document.body.append(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    });
-  } else {
-    kmlButton.title = 'This flight has no GPS fixes, so there is no path to show.';
-  }
+  wireKml(kmlButton, t, path,
+    `${locatorLabel(locatorId, rec.locatorName)}, ${formatRecordTime(rec.recordTs)}`,
+    csvFileName(rec).replace(/\.csv$/, '.kml'));
   body.append(view3d(t, path));
   renderCharts(body, t);
 }
@@ -347,6 +335,75 @@ function view3d(t: FlightTable, path: ReturnType<typeof flightPath>): HTMLElemen
   return section;
 }
 
+/** Enables [button] to save the flight as KML, or explains why it cannot. */
+function wireKml(button: HTMLButtonElement, t: FlightTable, path: ReturnType<typeof flightPath>, name: string, file: string) {
+  if (path.length < 2) {
+    button.title = 'This flight has no GPS fixes, so there is no path to show.';
+    return;
+  }
+  button.disabled = false;
+  button.addEventListener('click', () => {
+    const time = column(t, 'time_ms')!.map((v) => (v === null ? null : v / 1000));
+    const state = column(t, 'flight_state');
+    const kml = buildKml(name, path, state ? stateChanges(time, state) : []);
+    const url = URL.createObjectURL(new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' }));
+    const a = h('a', { href: url, download: file });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  });
+}
+
+// ---- a CSV from the viewer's own computer --------------------------------------------------
+//
+// Charts, 3D view and KML for an export already on disk (a USB export, or a CSV
+// downloaded earlier), read in the browser. Nothing is uploaded; the file is gone
+// when the page reloads.
+
+let localFile: { name: string; table: FlightTable } | null = null;
+
+function openLocalSection(): HTMLElement {
+  const status = h('p', { class: 'muted small', 'aria-live': 'polite' });
+  const input = h('input', { type: 'file', accept: '.csv,text/csv' });
+  input.addEventListener('change', async () => {
+    const f = input.files?.[0];
+    if (!f) return;
+    status.textContent = `Reading ${f.name}…`;
+    try {
+      const table = parseFlightCsv(await f.text());
+      if (!table.columns.includes('time_ms')) throw new Error('it has no time_ms column, so it is not a Steam Pigeon flight export');
+      localFile = { name: f.name, table };
+      location.hash = '#/local';
+    } catch (err) {
+      status.textContent = `Could not open ${f.name}: ${(err as Error).message}`;
+    }
+    input.value = '';
+  });
+  return h('section', { class: 'locator' },
+    h('h2', {}, 'Open a CSV from your computer'),
+    h('p', { class: 'muted' }, 'A USB export or a downloaded flight CSV. It is charted here in your browser and not uploaded.'),
+    h('label', { class: 'file' }, input),
+    status,
+  );
+}
+
+function localView() {
+  header();
+  if (!localFile) { location.hash = '#/'; return; }
+  const { name, table: t } = localFile;
+  const back = h('a', { href: '#/' }, '← All flights');
+  const kmlButton = h('button', { type: 'button', disabled: true }, 'Google Earth (.kml)');
+  const body = h('div', {},
+    h('h1', {}, name),
+    h('p', { class: 'muted' }, 'From your computer, not the web store. Reloading the page closes it.'),
+    h('div', { class: 'actions' }, kmlButton),
+  );
+  show(back, body);
+  const path = flightPath(t);
+  wireKml(kmlButton, t, path, name.replace(/\.csv$/i, ''), name.replace(/\.csv$/i, '') + '.kml');
+  body.append(view3d(t, path));
+  renderCharts(body, t);
+}
+
 // ---- routing ----------------------------------------------------------------------------
 
 function route() {
@@ -354,6 +411,7 @@ function route() {
   if (!user) { signInView(); return; }
   const m = /^#\/flight\/(\d+)\/(\d+_[0-9a-f]{8})$/.exec(location.hash);
   if (m) void flightView(m[1], m[2]);
+  else if (location.hash === '#/local') localView();
   else void listView();
 }
 
