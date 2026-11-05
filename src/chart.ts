@@ -62,7 +62,8 @@ export function panelChart(host: HTMLElement, input: PanelChartInput): uPlot {
   const opts: uPlot.Options = {
     width: Math.max(280, host.clientWidth),
     height: 220,
-    cursor: { sync: { key: 'flight', setSeries: false }, drag: { x: true, y: false, setScale: true } },
+    // Vertical time line only: Frank asked for the horizontal crosshair to go (2026-11-05).
+    cursor: { y: false, sync: { key: 'flight', setSeries: false }, drag: { x: true, y: false, setScale: true } },
     scales: { x: { time: false } },
     legend: { live: true },
     axes: [axis('Time (s)'), { ...axis(panel.unit || panel.title), size: 56 }],
