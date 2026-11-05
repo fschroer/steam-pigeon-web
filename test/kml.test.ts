@@ -76,9 +76,23 @@ describe('buildKml', () => {
 });
 
 describe('plain KML', () => {
-  it('has no gx: extensions and sets no camera, so it opens in Google Earth on the web', () => {
+  it('has no gx: extensions, so it opens in Google Earth on the web', () => {
     const kml = buildKml('x', [{ t: 0, lat: 37, lon: -122, agl: 0 }, { t: 1, lat: 37.001, lon: -122, agl: 10 }], []);
     expect(kml).not.toContain('gx:');
-    expect(kml).not.toContain('<LookAt>');
+  });
+
+  it('opens on an angled view of the whole flight', async () => {
+    const { orbitFor } = await import('../src/kml');
+    const path = [
+      { t: 0, lat: 37.0, lon: -122.0, agl: 0 },
+      { t: 10, lat: 37.001, lon: -122.0, agl: 600 },
+      { t: 60, lat: 37.002, lon: -121.998, agl: 0 },
+    ];
+    const v = orbitFor(path)!;
+    expect(v.lat).toBeCloseTo(37.001, 6);
+    expect(v.alt).toBe(300);
+    expect(v.range).toBeGreaterThanOrEqual(600 * 1.8);
+    const kml = buildKml('x', path, []);
+    expect(kml).toMatch(/<Document>\s*<name>x<\/name>\s*<open>1<\/open>\s*<LookAt>.*<tilt>70<\/tilt>/);
   });
 });

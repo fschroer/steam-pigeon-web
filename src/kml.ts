@@ -114,12 +114,51 @@ function nearest(path: PathPoint[], t: number): PathPoint | undefined {
   return best;
 }
 
+export interface Orbit {
+  lat: number;
+  lon: number;
+  /** Height above ground the camera aims at, m. */
+  alt: number;
+  /** Camera distance from that point, m. */
+  range: number;
+}
+
+const M_PER_DEG = 111_320;
+
+/** Where the opening view aims and how far back it stands, so the whole flight is in frame. */
+export function orbitFor(path: PathPoint[]): Orbit | undefined {
+  if (!path.length) return undefined;
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity, top = 0;
+  for (const p of path) {
+    minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat);
+    minLon = Math.min(minLon, p.lon); maxLon = Math.max(maxLon, p.lon);
+    top = Math.max(top, p.agl);
+  }
+  const lat = (minLat + maxLat) / 2;
+  const lon = (minLon + maxLon) / 2;
+  const ns = (maxLat - minLat) * M_PER_DEG;
+  const ew = (maxLon - minLon) * M_PER_DEG * Math.cos((lat * Math.PI) / 180);
+  const span = Math.max(Math.hypot(ns, ew), top);
+  return { lat, lon, alt: top / 2, range: Math.max(300, span * 1.8) };
+}
+
+/** The opening view looks at the flight from the south, tilted 70 degrees from straight down. */
+const VIEW_TILT = 70;
+
+function lookAt(o: Orbit, heading: number): string {
+  return `<LookAt><longitude>${o.lon.toFixed(7)}</longitude><latitude>${o.lat.toFixed(7)}</latitude>` +
+    `<altitude>${o.alt.toFixed(1)}</altitude><heading>${heading.toFixed(1)}</heading>` +
+    `<tilt>${VIEW_TILT}</tilt><range>${o.range.toFixed(0)}</range>` +
+    `<altitudeMode>relativeToGround</altitudeMode></LookAt>`;
+}
+
 /**
  * The flight as KML. Plain KML only: Google Earth on the web refuses a file with
- * gx: extensions (a fly-around gx:Tour was tried and withdrawn, 2026-11-05), and
- * no camera is set, so Earth frames the path itself.
+ * gx: extensions (a fly-around gx:Tour was tried and withdrawn, 2026-11-05). The
+ * Document's LookAt opens on an angled view of the whole flight.
  */
 export function buildKml(name: string, path: PathPoint[], events: PathEvent[]): string {
+  const view = orbitFor(path);
   const placemarks = events.map((e) => {
     const p = nearest(path, e.t);
     if (!p) return '';
@@ -135,6 +174,7 @@ export function buildKml(name: string, path: PathPoint[], events: PathEvent[]): 
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>${esc(name)}</name>
+    <open>1</open>${view ? `\n    ${lookAt(view, 0)}` : ''}
     <Style id="path">
       <LineStyle><color>ffd6782a</color><width>3</width></LineStyle>
       <PolyStyle><color>40d6782a</color></PolyStyle>
