@@ -25,6 +25,33 @@ describe('flightPath', () => {
   it('is empty without position columns', () => {
     expect(flightPath(table({ time_ms: [0, 1] }))).toEqual([]);
   });
+
+  // ~0.001 deg of latitude is 111 m.
+  const flight = (landedLat: number, landedT: number) => table({
+    time_ms:      [0,     1000,  2000,  3000,   4000,   5000,  landedT,   99000],
+    lat_deg:      [37.0,  37.0,  37.0,  37.001, 37.002, 37.003, landedLat, 37.0],
+    lon_deg:      [-122,  -122,  -122,  -122,   -122,   -122,  -122,      -122],
+    fused_agl_m:  [0,     0,     50,    300,    100,    5,     0,         0],
+    fix_type:     [3,     3,     3,     3,      3,      3,     3,         3],
+    flight_state: [0,     0,     1,     3,      4,      6,     8,         8],
+  });
+
+  it('runs from the pad to the first fix after Landed, not the walk back', () => {
+    const p = flightPath(flight(37.0031, 6000));
+    expect(p.map((x) => x.lat)).toEqual([37.0, 37.001, 37.002, 37.003, 37.0031]);
+  });
+
+  it('drops a landing fix no rocket could reach (a simulated flight snapping home)', () => {
+    // 333 m back to the pad in 0.1 s.
+    const p = flightPath(flight(37.0, 5100));
+    expect(p.map((x) => x.lat)).toEqual([37.0, 37.001, 37.002, 37.003]);
+  });
+
+  it('keeps a distant landing fix after a long dropout', () => {
+    // 333 m in 60 s is 5.6 m/s.
+    const p = flightPath(flight(37.006, 65000));
+    expect(p[p.length - 1].lat).toBe(37.006);
+  });
 });
 
 describe('buildKml', () => {
