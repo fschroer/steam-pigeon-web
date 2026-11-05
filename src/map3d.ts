@@ -98,6 +98,38 @@ export function flightCamera(path: PathPoint[], padMslM: number | undefined, asp
   };
 }
 
+/**
+ * Path points that answer the pointer: Google's 3D map fires no hover events on
+ * the map or a polyline, but Marker3DInteractiveElement fires gmp-pointerover.
+ * So small markers sit along the line, at least [minGapS] apart and at most
+ * [max] of them, the last point always included.
+ */
+export function hoverPoints(path: PathPoint[], minGapS = 1, max = 400): PathPoint[] {
+  if (!path.length) return [];
+  const span = path[path.length - 1].t - path[0].t;
+  const gap = Math.max(minGapS, span / Math.max(1, max - 1));
+  const out: PathPoint[] = [];
+  for (const p of path) {
+    if (!out.length || p.t - out[out.length - 1].t >= gap) out.push(p);
+  }
+  const last = path[path.length - 1];
+  if (out[out.length - 1] !== last) {
+    if (out.length >= max) out[out.length - 1] = last; else out.push(last);
+  }
+  return out;
+}
+
+/** The text the 3D view shows for a path point under the pointer. */
+export function readoutText(p: PathPoint): string {
+  return `${p.t.toFixed(1)} s · ${p.agl.toFixed(0)} m AGL`;
+}
+
+/** A hover point's dot: the path's orange, a little wider than the line. */
+export function hoverDotSvg(): string {
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8">' +
+    '<circle cx="4" cy="4" r="3.5" fill="#ff6600" fill-opacity="0.85"/></svg>';
+}
+
 /** The event pin: a small orange-ringed dot, in place of the default red map pin. */
 export function eventIconSvg(): string {
   return '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">' +
@@ -136,7 +168,7 @@ export interface Flight3D {
 /** Builds the 3D map into [host]: the path, a pin per flight event, and the angled view. */
 export async function showFlight3D(host: HTMLElement, path: PathPoint[], events: PathEvent[], camera: Camera3D): Promise<Flight3D> {
   const lib = await loadMaps3d(MAPS_KEY);
-  const { Map3DElement, Polyline3DElement, Marker3DElement } = lib;
+  const { Map3DElement, Polyline3DElement, Marker3DElement, Marker3DInteractiveElement } = lib;
 
   const { altitudeMode, ...opening } = camera;
   const map = new Map3DElement({ ...opening, mode: 'SATELLITE' });
@@ -153,6 +185,30 @@ export async function showFlight3D(host: HTMLElement, path: PathPoint[], events:
   });
   line.path = path.map((p) => ({ lat: p.lat, lng: p.lon, altitude: p.agl }));
   map.append(line);
+
+  // Time and height under the pointer, read off small markers along the line.
+  const readout = document.createElement('div');
+  readout.className = 'map3d-readout';
+  readout.hidden = true;
+  if (Marker3DInteractiveElement) {
+    const dot = `data:image/svg+xml;utf8,${encodeURIComponent(hoverDotSvg())}`;
+    for (const p of hoverPoints(path)) {
+      const m = new Marker3DInteractiveElement({
+        position: { lat: p.lat, lng: p.lon, altitude: p.agl },
+        altitudeMode: 'RELATIVE_TO_GROUND',
+        sizePreserved: true,
+      });
+      const tpl = document.createElement('template');
+      const img = document.createElement('img');
+      img.src = dot; img.width = 8; img.height = 8;
+      tpl.content.append(img);
+      m.append(tpl);
+      m.addEventListener('gmp-pointerover', () => { readout.textContent = readoutText(p); readout.hidden = false; });
+      m.addEventListener('gmp-pointerout', () => { readout.hidden = true; });
+      m.addEventListener('gmp-click', () => { readout.textContent = readoutText(p); readout.hidden = false; });
+      map.append(m);
+    }
+  }
 
   for (const e of events) {
     let best: PathPoint | undefined;
@@ -178,7 +234,7 @@ export async function showFlight3D(host: HTMLElement, path: PathPoint[], events:
   // Any click on the map stops a fly-around, so the viewer can take over.
   map.addEventListener('gmp-click', () => map.stopCameraAnimation?.());
 
-  host.replaceChildren(map);
+  host.replaceChildren(map, readout);
   // A ground-relative camera can only be reached by flying to it.
   if (altitudeMode) {
     let done = false;

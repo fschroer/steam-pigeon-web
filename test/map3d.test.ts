@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pressureAltitudeM, padElevationM, flightCamera } from '../src/map3d';
+import { pressureAltitudeM, padElevationM, flightCamera, hoverPoints, readoutText } from '../src/map3d';
 import type { FlightTable } from '../src/csv';
 
 function table(cols: Record<string, (number | null)[]>): FlightTable {
@@ -57,5 +57,25 @@ describe('flightCamera', () => {
     expect(c.center.altitude).toBe(300);
     expect(c.altitudeMode).toBe('RELATIVE_TO_GROUND');
     expect(flightCamera(path, 1000)!.altitudeMode).toBeUndefined();
+  });
+});
+
+describe('hoverPoints', () => {
+  const pts = (n: number, dt: number) =>
+    Array.from({ length: n }, (_, i) => ({ t: i * dt, lat: 37, lon: -122, agl: i }));
+
+  it('spaces points at least a second apart and keeps the last', () => {
+    const h = hoverPoints(pts(101, 0.1));          // 10 s at 10 Hz
+    expect(h.map((p) => p.t)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((v) => expect.closeTo(v, 6)));
+  });
+
+  it('caps the count on a long flight', () => {
+    const h = hoverPoints(pts(5000, 0.1), 1, 100);  // 500 s
+    expect(h.length).toBeLessThanOrEqual(100);
+    expect(h[h.length - 1].t).toBeCloseTo(499.9);
+  });
+
+  it('reads out time and height', () => {
+    expect(readoutText({ t: 12.345, lat: 0, lon: 0, agl: 845.4 })).toBe('12.3 s · 845 m AGL');
   });
 });
