@@ -7,7 +7,6 @@ import { formatRecordTime, recordId, csvFileName, locatorLabel } from './records
 import { parseFlightCsv, column, stateChanges, type FlightTable } from './csv';
 import { flightPath, buildKml } from './kml';
 import { MAPS_KEY, padElevationM, flightCamera, showFlight3D } from './map3d';
-import { seriesColor } from './chart';
 import { h, type Child } from './dom';
 import { renderCharts, disposeCharts } from './flight';
 
@@ -316,7 +315,7 @@ function view3d(t: FlightTable, path: ReturnType<typeof flightPath>): HTMLElemen
       'Not available in this build: add VITE_GOOGLE_MAPS_API_KEY to .env.local (see the README).'));
     return section;
   }
-  const camera = flightCamera(path, padElevationM(t))!;
+  const pad = padElevationM(t);
   const time = column(t, 'time_ms')!.map((v) => (v === null ? null : v / 1000));
   const state = column(t, 'flight_state');
   const events = state ? stateChanges(time, state) : [];
@@ -330,7 +329,9 @@ function view3d(t: FlightTable, path: ReturnType<typeof flightPath>): HTMLElemen
     show.disabled = true; show.textContent = 'Loading 3D map…';
     section.append(host);
     try {
-      const v = await showFlight3D(host, path, events, camera, seriesColor(0));
+      const aspect = host.clientHeight / Math.max(1, host.clientWidth);
+      const camera = flightCamera(path, pad, aspect)!;
+      const v = await showFlight3D(host, path, events, camera);
       const fly = h('button', { type: 'button', class: 'primary' }, 'Fly around');
       fly.title = 'One slow circle around the flight. Click the map to stop.';
       fly.addEventListener('click', () => v.flyAround());

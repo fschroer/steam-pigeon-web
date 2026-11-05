@@ -178,8 +178,8 @@ export function buildKml(name: string, path: PathPoint[], events: PathEvent[]): 
     <name>${esc(name)}</name>
     <open>1</open>${view ? `\n    ${lookAt(view, 0)}` : ''}
     <Style id="path">
-      <LineStyle><color>ffd6782a</color><width>3</width></LineStyle>
-      <PolyStyle><color>40d6782a</color></PolyStyle>
+      <LineStyle><color>ff0066ff</color><width>3</width></LineStyle>
+      <PolyStyle><color>400066ff</color></PolyStyle>
     </Style>
     <Style id="event">
       <IconStyle><scale>0.8</scale></IconStyle>

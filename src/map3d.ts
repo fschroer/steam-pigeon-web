@@ -51,16 +51,46 @@ export interface Camera3D {
   heading: number;
 }
 
-/** The angled opening view: the whole flight in frame, from the south, 67.5 degrees of tilt. */
-export function flightCamera(path: PathPoint[], padMslM: number | undefined): Camera3D | undefined {
+/** The app's flight-path color (MapLibreCompat COLOR_PATH), so both draw the same orange. */
+export const PATH_COLOR = '#ff6600';
+
+const TILT = 67.5;
+/** Map3DElement's default field of view, degrees; taken as horizontal. */
+const FOV = 35;
+/** Room around the flight for the pins and their labels. */
+const MARGIN = 1.35;
+
+/**
+ * The angled opening view: the whole flight in frame, from the south.
+ * [aspect] is the map's height / width. The camera stands back far enough for
+ * both the flight's height and its ground track to fit, with a margin for the
+ * event pins' labels, which sit above the highest points.
+ */
+export function flightCamera(path: PathPoint[], padMslM: number | undefined, aspect = 0.5): Camera3D | undefined {
   const o = orbitFor(path);
   if (!o) return undefined;
+  let top = 0;
+  for (const p of path) top = Math.max(top, p.agl);
+  const hHalf = (FOV / 2) * (Math.PI / 180);
+  const vHalf = Math.atan(Math.tan(hHalf) * aspect);
+  // Seen from 67.5 degrees of tilt the vertical spans almost its full height
+  // across the screen (sin of the tilt); the ground track is foreshortened.
+  const tiltRad = (TILT * Math.PI) / 180;
+  const needV = ((top / 2) * Math.sin(tiltRad) * MARGIN) / Math.tan(vHalf);
+  const ground = o.range / 1.8;            // orbitFor's span, before its own factor
+  const needH = ((ground / 2) * MARGIN) / Math.tan(hHalf);
   return {
     center: { lat: o.lat, lng: o.lon, altitude: (padMslM ?? 0) + o.alt },
-    range: o.range,
-    tilt: 67.5,
+    range: Math.max(300, needV, needH),
+    tilt: TILT,
     heading: 0,
   };
+}
+
+/** The event pin: a small orange-ringed dot, in place of the default red map pin. */
+export function eventIconSvg(): string {
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">' +
+    '<circle cx="9" cy="9" r="6.5" fill="#ffffff" stroke="#ff6600" stroke-width="3"/></svg>';
 }
 
 // ---- loading the Maps JavaScript API ----------------------------------------------------
@@ -93,7 +123,7 @@ export interface Flight3D {
 }
 
 /** Builds the 3D map into [host]: the path, a pin per flight event, and the angled view. */
-export async function showFlight3D(host: HTMLElement, path: PathPoint[], events: PathEvent[], camera: Camera3D, pathColor: string): Promise<Flight3D> {
+export async function showFlight3D(host: HTMLElement, path: PathPoint[], events: PathEvent[], camera: Camera3D): Promise<Flight3D> {
   const lib = await loadMaps3d(MAPS_KEY);
   const { Map3DElement, Polyline3DElement, Marker3DElement } = lib;
 
@@ -103,7 +133,7 @@ export async function showFlight3D(host: HTMLElement, path: PathPoint[], events:
 
   const line = new Polyline3DElement({
     altitudeMode: 'RELATIVE_TO_GROUND',
-    strokeColor: pathColor,
+    strokeColor: PATH_COLOR,
     strokeWidth: 4,
     outerColor: '#ffffff',
     outerWidth: 0.3,
@@ -116,12 +146,20 @@ export async function showFlight3D(host: HTMLElement, path: PathPoint[], events:
     let best: PathPoint | undefined;
     for (const p of path) if (!best || Math.abs(p.t - e.t) < Math.abs(best.t - e.t)) best = p;
     if (!best) continue;
-    map.append(new Marker3DElement({
+    // No extrusion: Frank asked for the white lines down to the ground to go.
+    const marker = new Marker3DElement({
       position: { lat: best.lat, lng: best.lon, altitude: best.agl },
       altitudeMode: 'RELATIVE_TO_GROUND',
-      extruded: true,
       label: flightStateName(e.state),
-    }));
+      sizePreserved: true,
+    });
+    const icon = document.createElement('template');
+    const img = document.createElement('img');
+    img.src = `data:image/svg+xml;utf8,${encodeURIComponent(eventIconSvg())}`;
+    img.width = 18; img.height = 18;
+    icon.content.append(img);
+    marker.append(icon);
+    map.append(marker);
   }
 
   map.addEventListener('gmp-error', () => { /* surfaced by the caller's timeout text */ });

@@ -38,7 +38,18 @@ describe('flightCamera', () => {
     expect(c.center.altitude).toBe(1300);
     expect(c.tilt).toBe(67.5);
     expect(c.heading).toBe(0);
-    expect(c.range).toBeGreaterThanOrEqual(600 * 1.8);
+  });
+
+  it('stands back far enough that the top of the flight, plus a margin, is in frame', () => {
+    for (const aspect of [0.3, 0.5, 1]) {
+      const c = flightCamera(path, 0, aspect)!;
+      const vHalf = Math.atan(Math.tan((17.5 * Math.PI) / 180) * aspect);
+      const visibleHalfHeight = c.range * Math.tan(vHalf);
+      // The apogee sits 300 m above the aim point; seen at 67.5 degrees tilt.
+      expect(visibleHalfHeight).toBeGreaterThanOrEqual(300 * Math.sin((67.5 * Math.PI) / 180) * 1.3);
+    }
+    // A wider map needs a longer range for the same height.
+    expect(flightCamera(path, 0, 0.3)!.range).toBeGreaterThan(flightCamera(path, 0, 1)!.range);
   });
 
   it('falls back to sea level for the pad', () => {
