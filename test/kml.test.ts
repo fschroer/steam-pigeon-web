@@ -47,3 +47,35 @@ describe('buildKml', () => {
     expect(kml).toMatch(/Nose-over[\s\S]*<coordinates>-122\.2,37\.2,600\.0<\/coordinates>/);
   });
 });
+
+describe('fly-around tour', () => {
+  const path = [
+    { t: 0, lat: 37.0, lon: -122.0, agl: 0 },
+    { t: 10, lat: 37.001, lon: -122.0, agl: 600 },
+    { t: 60, lat: 37.002, lon: -121.998, agl: 0 },
+  ];
+
+  it('aims at the middle of the flight and stands back far enough to frame it', async () => {
+    const { orbitFor } = await import('../src/kml');
+    const o = orbitFor(path)!;
+    expect(o.lat).toBeCloseTo(37.001, 6);
+    expect(o.lon).toBeCloseTo(-121.999, 6);
+    expect(o.alt).toBe(300);
+    expect(o.range).toBeGreaterThanOrEqual(600 * 1.8);
+  });
+
+  it('circles once: a heading every 10 degrees, ending back at north', async () => {
+    const { ORBIT_STEPS } = await import('../src/kml');
+    const kml = buildKml('x', path, []);
+    expect(kml).toContain('xmlns:gx="http://www.google.com/kml/ext/2.2"');
+    expect(kml).toContain('<name>Fly around</name>');
+    const headings = [...kml.matchAll(/<gx:FlyTo>.*?<heading>([\d.]+)<\/heading>/g)].map((m) => Number(m[1]));
+    expect(headings.length).toBe(ORBIT_STEPS + 1);
+    expect(headings[1]).toBe(10);
+    expect(headings[headings.length - 1]).toBe(360);
+  });
+
+  it('has no tour without a path', () => {
+    expect(buildKml('x', [], [])).not.toContain('gx:Tour');
+  });
+});

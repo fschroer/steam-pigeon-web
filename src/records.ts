@@ -61,3 +61,9 @@ export function formatRecordTime(ts: number): string {
 export function csvFileName(r: Pick<RecordRef, 'locatorId' | 'recordTs' | 'crc'>): string {
   return `steam-pigeon_${r.locatorId}_${r.recordTs}_${r.crc}.csv`;
 }
+
+/** How a locator is titled: its own name when an upload carried one, else its id. */
+export function locatorLabel(locatorId: string, name?: string): string {
+  const n = name?.trim();
+  return n ? `${n} (${locatorId})` : `Locator ${locatorId}`;
+}

@@ -59,7 +59,68 @@ function nearest(path: PathPoint[], t: number): PathPoint | undefined {
   return best;
 }
 
+export interface Orbit {
+  lat: number;
+  lon: number;
+  /** Height above ground the camera aims at, m. */
+  alt: number;
+  /** Camera distance from that point, m. */
+  range: number;
+}
+
+const M_PER_DEG = 111_320;
+
+/** Where a fly-around aims and how far out it circles, so the whole flight stays in frame. */
+export function orbitFor(path: PathPoint[]): Orbit | undefined {
+  if (!path.length) return undefined;
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity, top = 0;
+  for (const p of path) {
+    minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat);
+    minLon = Math.min(minLon, p.lon); maxLon = Math.max(maxLon, p.lon);
+    top = Math.max(top, p.agl);
+  }
+  const lat = (minLat + maxLat) / 2;
+  const lon = (minLon + maxLon) / 2;
+  const ns = (maxLat - minLat) * M_PER_DEG;
+  const ew = (maxLon - minLon) * M_PER_DEG * Math.cos((lat * Math.PI) / 180);
+  const span = Math.max(Math.hypot(ns, ew), top);
+  return { lat, lon, alt: top / 2, range: Math.max(300, span * 1.8) };
+}
+
+/** Fly-around timing: one full circle in this many steps and seconds. */
+export const ORBIT_STEPS = 36;
+export const ORBIT_SECONDS = 40;
+const ORBIT_TILT = 70;
+
+function lookAt(o: Orbit, heading: number): string {
+  return `<LookAt><longitude>${o.lon.toFixed(7)}</longitude><latitude>${o.lat.toFixed(7)}</latitude>` +
+    `<altitude>${o.alt.toFixed(1)}</altitude><heading>${heading.toFixed(1)}</heading>` +
+    `<tilt>${ORBIT_TILT}</tilt><range>${o.range.toFixed(0)}</range>` +
+    `<altitudeMode>relativeToGround</altitudeMode></LookAt>`;
+}
+
+/**
+ * A gx:Tour that circles the flight once, always pointing at its center.
+ * Google Earth Pro plays it from the Places panel (double-click "Fly around").
+ * Support for KML tours in Google Earth on the web is not verified here.
+ */
+function tour(o: Orbit): string {
+  const step = ORBIT_SECONDS / ORBIT_STEPS;
+  const legs = [];
+  for (let i = 1; i <= ORBIT_STEPS; i++) {
+    legs.push(`          <gx:FlyTo><gx:duration>${step.toFixed(2)}</gx:duration><gx:flyToMode>smooth</gx:flyToMode>${lookAt(o, (i * 360) / ORBIT_STEPS)}</gx:FlyTo>`);
+  }
+  return `    <gx:Tour>
+      <name>Fly around</name>
+      <gx:Playlist>
+          <gx:FlyTo><gx:duration>3</gx:duration><gx:flyToMode>bounce</gx:flyToMode>${lookAt(o, 0)}</gx:FlyTo>
+${legs.join('\n')}
+      </gx:Playlist>
+    </gx:Tour>`;
+}
+
 export function buildKml(name: string, path: PathPoint[], events: PathEvent[]): string {
+  const orbit = orbitFor(path);
   const placemarks = events.map((e) => {
     const p = nearest(path, e.t);
     if (!p) return '';
@@ -72,9 +133,10 @@ export function buildKml(name: string, path: PathPoint[], events: PathEvent[]): 
   }).filter(Boolean).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
   <Document>
     <name>${esc(name)}</name>
+    <open>1</open>${orbit ? `\n    ${lookAt(orbit, 0)}` : ''}
     <Style id="path">
       <LineStyle><color>ffd6782a</color><width>3</width></LineStyle>
       <PolyStyle><color>40d6782a</color></PolyStyle>
@@ -96,6 +158,7 @@ ${path.map((p) => `          ${coord(p)}`).join('\n')}
       </LineString>
     </Placemark>
 ${placemarks}
+${orbit ? tour(orbit) : ''}
   </Document>
 </kml>
 `;

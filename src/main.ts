@@ -3,7 +3,7 @@ import type { User } from 'firebase/auth';
 import { configured } from './firebase';
 import { watchUser, signInGoogle, signInEmail, resetPassword, signOut, authMessage } from './auth';
 import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, type RecordInfo } from './store';
-import { formatRecordTime, recordId, csvFileName } from './records';
+import { formatRecordTime, recordId, csvFileName, locatorLabel } from './records';
 import { parseFlightCsv, column, stateChanges, type FlightTable } from './csv';
 import { flightPath, buildKml } from './kml';
 import { h, type Child } from './dom';
@@ -138,12 +138,24 @@ async function listView() {
   }
   body.replaceChildren();
   for (const [locatorId, recs] of flights) {
+    // The heading takes the name from the newest upload that carries one, so a
+    // renamed locator shows its current name.
+    const heading = h('h2', {}, locatorLabel(locatorId));
+    let namedTs = -1;
+    const noteName = (r: RecordInfo) => {
+      if (r.locatorName && r.recordTs > namedTs) {
+        namedTs = r.recordTs;
+        heading.textContent = locatorLabel(locatorId, r.locatorName);
+      }
+    };
     const rows = recs.map((r) => {
       const samples = h('td', { class: 'num' }, r.samples !== undefined ? r.samples.toLocaleString() : '…');
-      if (r.samples === undefined) {
+      noteName(r);
+      if (!('sizeBytes' in r)) {
         loadInfo(r).then((info) => {
           Object.assign(r, info);
           samples.textContent = info.samples !== undefined ? info.samples.toLocaleString() : '–';
+          noteName(r);
         }).catch(() => { samples.textContent = '–'; });
       }
       const files = [r.csvPath && 'CSV', r.binPath && 'raw'].filter(Boolean).join(' + ');
@@ -154,7 +166,7 @@ async function listView() {
       );
     });
     body.append(h('section', { class: 'locator' },
-      h('h2', {}, `Locator ${locatorId}`),
+      heading,
       h('table', {},
         h('thead', {}, h('tr', {},
           h('th', {}, 'Flight'), h('th', { class: 'num' }, 'Samples'), h('th', {}, 'Files'))),
@@ -192,7 +204,13 @@ async function flightView(locatorId: string, id: string) {
   if (!rec) { body.replaceChildren(errorBox('That flight is not in your store.')); return; }
 
   const title = h('h1', {}, formatRecordTime(rec.recordTs));
-  const sub = h('p', { class: 'muted' }, `Locator ${locatorId} · record ${rec.crc}`);
+  const sub = h('p', { class: 'muted' }, `${locatorLabel(locatorId, rec.locatorName)} · record ${rec.crc}`);
+  if (!('sizeBytes' in rec)) {
+    loadInfo(rec).then((info) => {
+      Object.assign(rec, info);
+      sub.textContent = `${locatorLabel(locatorId, rec.locatorName)} · record ${rec.crc}`;
+    }).catch(() => { /* the id alone is still correct */ });
+  }
   const actions = h('div', { class: 'actions' });
   if (rec.csvPath) {
     const b = h('button', { type: 'button', class: 'primary' }, 'Download CSV');
@@ -266,7 +284,7 @@ async function flightView(locatorId: string, id: string) {
     kmlButton.addEventListener('click', () => {
       const time = column(t, 'time_ms')!.map((v) => (v === null ? null : v / 1000));
       const state = column(t, 'flight_state');
-      const name = `Locator ${locatorId}, ${formatRecordTime(rec.recordTs)}`;
+      const name = `${locatorLabel(locatorId, rec.locatorName)}, ${formatRecordTime(rec.recordTs)}`;
       const kml = buildKml(name, path, state ? stateChanges(time, state) : []);
       const url = URL.createObjectURL(new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' }));
       const a = h('a', { href: url, download: csvFileName(rec).replace(/\.csv$/, '.kml') });

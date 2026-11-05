@@ -5,6 +5,8 @@ import { groupRecords, recordsPrefix, type RecordRef } from './records';
 export interface RecordInfo extends RecordRef {
   samples?: number;
   slot?: number;
+  /** The locator's own name at upload time; absent on uploads before 2026-11-05. */
+  locatorName?: string;
   sizeBytes?: number;
 }
 
@@ -28,10 +30,11 @@ export async function listFlights(uid: string): Promise<Map<string, RecordInfo[]
 export async function loadInfo(r: RecordRef): Promise<RecordInfo> {
   const path = r.csvPath ?? r.binPath;
   if (!path) return r;
+  if ('sizeBytes' in r) return r as RecordInfo;   // already loaded
   const m = await getMetadata(ref(storage(), path));
   const c = m.customMetadata ?? {};
   const num = (s?: string) => (s !== undefined && s !== '' && Number.isFinite(Number(s)) ? Number(s) : undefined);
-  return { ...r, samples: num(c.samples), slot: num(c.slot), sizeBytes: m.size };
+  return { ...r, samples: num(c.samples), slot: num(c.slot), sizeBytes: m.size, locatorName: c.locator_name?.trim() || undefined };
 }
 
 export async function fetchCsvText(path: string): Promise<string> {
