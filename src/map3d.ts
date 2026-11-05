@@ -11,7 +11,11 @@
 // no ground elevation. The camera's center altitude is absolute (MSL), and the CSV
 // has no GPS altitude, so the pad's height is estimated from the baro pressure on
 // the pad (standard atmosphere). Weather moves that by tens of meters, which only
-// nudges where the camera aims.
+// nudges where the camera aims. Older exports carry no pressure column; then the
+// pad's height comes from Google's Elevation service, one request per map load
+// (the Elevation API must be enabled for the key). Aiming at sea level instead
+// put the camera's target hundreds of meters underground at a high site (Black
+// Rock, about 1,190 m), which cut off the top of the flight.
 
 import { column, type FlightTable } from './csv';
 import { orbitFor, type PathPoint, type PathEvent } from './kml';
@@ -114,6 +118,24 @@ function loadMaps3d(key: string): Promise<Maps3d> {
     document.head.append(s);
   });
   return loading;
+}
+
+/**
+ * The ground's height above sea level at a point, from the Maps JavaScript
+ * Elevation service, or undefined if it cannot be had (the API not enabled for
+ * the key, or no network). Loads the Maps script if it is not loaded yet.
+ */
+export async function groundElevationM(lat: number, lng: number): Promise<number | undefined> {
+  try {
+    await loadMaps3d(MAPS_KEY);
+    const w = window as unknown as { google: any };
+    const { ElevationService } = await w.google.maps.importLibrary('elevation');
+    const res = await new ElevationService().getElevationForLocations({ locations: [{ lat, lng }] });
+    const e = res?.results?.[0]?.elevation;
+    return typeof e === 'number' && Number.isFinite(e) ? e : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export interface Flight3D {
