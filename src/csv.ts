@@ -10,19 +10,33 @@ export interface FlightTable {
   rows: number;
 }
 
+/**
+ * Finds the header: the first line whose fields include time_ms. Older USB exports
+ * open with metadata lines (locator name, settings and the like) before it, so
+ * every line above the header is skipped. Without a time_ms line, the first
+ * non-blank line is taken as the header, and a caller that needs time_ms says so.
+ */
+function headerIndex(lines: string[]): number {
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].split(',').some((f) => f.trim().replace(/^"|"$/g, '') === 'time_ms')) return i;
+  }
+  return lines.findIndex((l) => l.trim() !== '');
+}
+
 export function parseFlightCsv(text: string): FlightTable {
-  const lines = text.split(/\r?\n/);
-  const header = (lines[0] ?? '').trim();
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+  const h = headerIndex(lines);
+  const header = h < 0 ? '' : lines[h].trim();
   if (!header) throw new Error('empty CSV');
-  const columns = header.split(',');
+  const columns = header.split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
   const data: (number | null)[][] = columns.map(() => []);
   let rows = 0;
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = h + 1; i < lines.length; i++) {
     const line = lines[i];
-    if (!line) continue;
+    if (!line || !line.trim()) continue;
     const f = line.split(',');
     for (let c = 0; c < columns.length; c++) {
-      const s = f[c];
+      const s = f[c]?.trim();
       if (s === undefined || s === '') { data[c].push(null); continue; }
       const v = Number(s);
       data[c].push(Number.isFinite(v) ? v : null);

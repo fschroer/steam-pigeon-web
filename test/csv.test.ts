@@ -31,6 +31,21 @@ describe('parseFlightCsv', () => {
     expect(column(t, 'lat_deg')![0]).toBe(37.7749295);
   });
 
+  it('skips metadata lines above the header', () => {
+    const text = ['Steam Pigeon flight export', 'Locator: Tron, id 1136992075', 'Apogee,641.8', '',
+      HEADER, row(0, 0, '0.00'), row(20, 1, '1.25')].join('\r\n');
+    const t = parseFlightCsv(text);
+    expect(t.rows).toBe(2);
+    expect(t.columns[0]).toBe('time_ms');
+    expect(column(t, 'fused_agl_m')).toEqual([0, 1.25]);
+  });
+
+  it('ignores a byte-order mark and quoted header names', () => {
+    const t = parseFlightCsv('\uFEFF"time_ms","fused_agl_m"\n0,1.5\n');
+    expect(t.columns).toEqual(['time_ms', 'fused_agl_m']);
+    expect(column(t, 'fused_agl_m')).toEqual([1.5]);
+  });
+
   it('rejects an empty file', () => {
     expect(() => parseFlightCsv('')).toThrow();
   });
