@@ -39,11 +39,26 @@ export function groundDistanceM(a: { lat: number; lon: number }, b: { lat: numbe
   return Math.hypot(dLat, dLon);
 }
 
+/**
+ * The height above ground to draw: fused_agl_m, unless the record has no real
+ * fused solution. Older exports, and records whose fusion never ran, carry the
+ * column as blanks or as 0.00 (the export prints a NaN as 0.00), and drawing
+ * that would flatten the flight onto the ground. Then raw_baro_agl_m is used.
+ */
+export function heightColumn(table: FlightTable): (number | null)[] | undefined {
+  const fused = column(table, 'fused_agl_m');
+  const raw = column(table, 'raw_baro_agl_m');
+  const peak = (c?: (number | null)[]) => (c ?? []).reduce<number>((m, v) => (v !== null && v > m ? v : m), 0);
+  if (fused && peak(fused) >= 1) return fused;
+  if (raw && peak(raw) >= 1) return raw;
+  return fused ?? raw;
+}
+
 export function flightPath(table: FlightTable): PathPoint[] {
   const time = column(table, 'time_ms');
   const lat = column(table, 'lat_deg');
   const lon = column(table, 'lon_deg');
-  const agl = column(table, 'fused_agl_m');
+  const agl = heightColumn(table);
   const fix = column(table, 'fix_type');
   const state = column(table, 'flight_state');
   if (!time || !lat || !lon || !agl) return [];
