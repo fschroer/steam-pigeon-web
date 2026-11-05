@@ -6,7 +6,7 @@ import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord
 import { formatRecordTime, recordId, csvFileName, locatorLabel } from './records';
 import { parseFlightCsv, column, stateChanges, type FlightTable } from './csv';
 import { flightPath, buildKml } from './kml';
-import { MAPS_KEY, padElevationM, groundElevationM, flightCamera, showFlight3D } from './map3d';
+import { MAPS_KEY, padElevationM, flightCamera, showFlight3D } from './map3d';
 import { h, type Child } from './dom';
 import { renderCharts, disposeCharts } from './flight';
 
@@ -318,8 +318,7 @@ function view3d(t: FlightTable, path: ReturnType<typeof flightPath>): HTMLElemen
     section.append(host);
     try {
       const aspect = host.clientHeight / Math.max(1, host.clientWidth);
-      const padMsl = pad ?? await groundElevationM(path[0].lat, path[0].lon);
-      const camera = flightCamera(path, padMsl, aspect)!;
+      const camera = flightCamera(path, pad, aspect)!;
       const v = await showFlight3D(host, path, events, camera);
       const fly = h('button', { type: 'button', class: 'primary' }, 'Fly around');
       fly.title = 'One slow circle around the flight. Click the map to stop.';

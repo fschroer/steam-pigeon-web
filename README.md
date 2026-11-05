@@ -48,22 +48,18 @@ angled view and a fly-around. It needs a Google Maps Platform key; without one t
 (console.cloud.google.com, project `steam-pigeon`, which already has billing because
 Firebase is on Blaze):
 
-1. APIs & Services → Library → enable **Maps JavaScript API** and **Elevation API**.
+1. APIs & Services → Library → enable **Maps JavaScript API**.
 2. APIs & Services → Credentials → *Create credentials* → API key. Edit the key:
    - Application restrictions → **Websites**: `https://steam-pigeon.web.app/*`,
      `https://steam-pigeon.firebaseapp.com/*`, `http://localhost:5173/*` (and a
      custom domain, if any).
-   - API restrictions → **Restrict key** → Maps JavaScript API and Elevation API.
+   - API restrictions → **Restrict key** → Maps JavaScript API only.
 3. Put it in `.env.local` as `VITE_GOOGLE_MAPS_API_KEY=…`, then `npm run dev` or
    `npm run deploy`.
 4. Recommended: Billing → Budgets & alerts, a small monthly budget with an email alert.
 
 Each "Show 3D view" click is one billed map load ("Immersive Maps" SKU: 5,000 free
 a month as of 2026-11; then about $7 per 1,000). The map never loads on its own.
-Older exports carry no pad pressure, so for those the click also makes one
-Elevation API request for the pad's ground height, which aims the camera (10,000
-free a month as of 2026-11). Without it the view aims at sea level, and the top of
-a flight from a high site is cut off.
 The key ends up in the public site bundle, as every browser Maps key does; the
 website and API restrictions above are what protect it.
 

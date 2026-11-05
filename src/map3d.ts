@@ -11,11 +11,11 @@
 // no ground elevation. The camera's center altitude is absolute (MSL), and the CSV
 // has no GPS altitude, so the pad's height is estimated from the baro pressure on
 // the pad (standard atmosphere). Weather moves that by tens of meters, which only
-// nudges where the camera aims. Older exports carry no pressure column; then the
-// pad's height comes from Google's Elevation service, one request per map load
-// (the Elevation API must be enabled for the key). Aiming at sea level instead
-// put the camera's target hundreds of meters underground at a high site (Black
-// Rock, about 1,190 m), which cut off the top of the flight.
+// nudges where the camera aims. Older exports carry no pressure column. Then the
+// camera aims relative to the ground (CameraOptions.altitudeMode), which only the
+// fly animations accept, so the map opens and at once flies to that view. Aiming
+// at sea level instead put the target hundreds of meters underground at a high
+// site (Black Rock, about 1,190 m) and cut off the top of the flight.
 
 import { column, type FlightTable } from './csv';
 import { orbitFor, type PathPoint, type PathEvent } from './kml';
@@ -53,6 +53,12 @@ export interface Camera3D {
   range: number;
   tilt: number;
   heading: number;
+  /**
+   * RELATIVE_TO_GROUND when the pad's sea-level height is unknown: center.altitude
+   * is then above the ground. Map3DElement's own center is always above sea level,
+   * so such a camera is reached with flyCameraTo.
+   */
+  altitudeMode?: 'RELATIVE_TO_GROUND';
 }
 
 /** The app's flight-path color (MapLibreCompat COLOR_PATH), so both draw the same orange. */
@@ -88,6 +94,7 @@ export function flightCamera(path: PathPoint[], padMslM: number | undefined, asp
     range: Math.max(300, needV, needH),
     tilt: TILT,
     heading: 0,
+    ...(padMslM === undefined ? { altitudeMode: 'RELATIVE_TO_GROUND' as const } : {}),
   };
 }
 
@@ -120,24 +127,6 @@ function loadMaps3d(key: string): Promise<Maps3d> {
   return loading;
 }
 
-/**
- * The ground's height above sea level at a point, from the Maps JavaScript
- * Elevation service, or undefined if it cannot be had (the API not enabled for
- * the key, or no network). Loads the Maps script if it is not loaded yet.
- */
-export async function groundElevationM(lat: number, lng: number): Promise<number | undefined> {
-  try {
-    await loadMaps3d(MAPS_KEY);
-    const w = window as unknown as { google: any };
-    const { ElevationService } = await w.google.maps.importLibrary('elevation');
-    const res = await new ElevationService().getElevationForLocations({ locations: [{ lat, lng }] });
-    const e = res?.results?.[0]?.elevation;
-    return typeof e === 'number' && Number.isFinite(e) ? e : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export interface Flight3D {
   map: HTMLElement;
   flyAround(): void;
@@ -149,7 +138,8 @@ export async function showFlight3D(host: HTMLElement, path: PathPoint[], events:
   const lib = await loadMaps3d(MAPS_KEY);
   const { Map3DElement, Polyline3DElement, Marker3DElement } = lib;
 
-  const map = new Map3DElement({ ...camera, mode: 'SATELLITE' });
+  const { altitudeMode, ...opening } = camera;
+  const map = new Map3DElement({ ...opening, mode: 'SATELLITE' });
   map.style.width = '100%';
   map.style.height = '100%';
 
@@ -189,6 +179,17 @@ export async function showFlight3D(host: HTMLElement, path: PathPoint[], events:
   map.addEventListener('gmp-click', () => map.stopCameraAnimation?.());
 
   host.replaceChildren(map);
+  // A ground-relative camera can only be reached by flying to it.
+  if (altitudeMode) {
+    let done = false;
+    const go = () => {
+      if (done) return;
+      done = true;
+      map.flyCameraTo({ endCamera: camera, durationMillis: 800 });
+    };
+    map.addEventListener('gmp-steadychange', go);
+    setTimeout(go, 2_000);   // in case the steady event never comes
+  }
   return {
     map,
     flyAround: () => map.flyCameraAround({ camera, durationMillis: 30_000, repeatCount: 1 }),

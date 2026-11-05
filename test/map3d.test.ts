@@ -52,7 +52,10 @@ describe('flightCamera', () => {
     expect(flightCamera(path, 0, 0.3)!.range).toBeGreaterThan(flightCamera(path, 0, 1)!.range);
   });
 
-  it('falls back to sea level for the pad', () => {
-    expect(flightCamera(path, undefined)!.center.altitude).toBe(300);
+  it('aims relative to the ground when the pad height is unknown', () => {
+    const c = flightCamera(path, undefined)!;
+    expect(c.center.altitude).toBe(300);
+    expect(c.altitudeMode).toBe('RELATIVE_TO_GROUND');
+    expect(flightCamera(path, 1000)!.altitudeMode).toBeUndefined();
   });
 });
