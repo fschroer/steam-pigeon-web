@@ -155,7 +155,9 @@ function lookAt(o: Orbit, heading: number): string {
 /**
  * The flight as KML. Plain KML only: Google Earth on the web refuses a file with
  * gx: extensions (a fly-around gx:Tour was tried and withdrawn, 2026-11-05). The
- * Document's LookAt opens on an angled view of the whole flight.
+ * same angled LookAt sits on the Document and on the path's Placemark: Earth Pro
+ * opens on the Document's, and Earth on the web flies to a feature's view when it
+ * is selected in the project list.
  */
 export function buildKml(name: string, path: PathPoint[], events: PathEvent[]): string {
   const view = orbitFor(path);
@@ -184,7 +186,7 @@ export function buildKml(name: string, path: PathPoint[], events: PathEvent[]): 
       <LabelStyle><scale>0.8</scale></LabelStyle>
     </Style>
     <Placemark>
-      <name>Flight path</name>
+      <name>Flight path</name>${view ? `\n      ${lookAt(view, 0)}` : ''}
       <styleUrl>#path</styleUrl>
       <LineString>
         <extrude>1</extrude>
