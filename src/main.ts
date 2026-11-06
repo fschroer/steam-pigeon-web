@@ -14,6 +14,7 @@ import { flightPath, buildKml } from './kml';
 import { MAPS_KEY, padElevationM, flightCamera, showFlight3D } from './map3d';
 import { h, type Child } from './dom';
 import { renderCharts, disposeCharts } from './flight';
+import { currentUnits, saveUnits, type Units } from './units';
 
 const root = document.getElementById('app')!;
 const who = document.getElementById('who')!;
@@ -47,6 +48,21 @@ themeButton.addEventListener('click', () => {
   route();   // the charts take their colors when drawn
 });
 applyTheme(currentTheme());
+
+// ---- units: metric or English, for charts and readouts only (the CSV stays SI) ------
+
+const unitsButton = document.getElementById('units') as HTMLButtonElement;
+function applyUnits(u: Units) {
+  unitsButton.textContent = `Units: ${u === 'english' ? 'English (ft)' : 'Metric (m)'}`;
+  unitsButton.title = 'Switch charts and readouts between meters and feet. Downloads stay in meters.';
+}
+unitsButton.addEventListener('click', () => {
+  const next: Units = currentUnits() === 'english' ? 'metric' : 'english';
+  saveUnits(next);
+  applyUnits(next);
+  route();
+});
+applyUnits(currentUnits());
 
 function show(...nodes: Child[]) {
   disposeCharts();
