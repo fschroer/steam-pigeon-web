@@ -21,6 +21,11 @@ sharing by link).
 - **`storage.rules` lives here now and is deployed, not pasted** (`firebase deploy --only
   storage`). It guards the whole bucket, the phone app's uploads included. Review a change
   to it like code, and never loosen `users/{uid}` to anything wider without an ADR.
+- **Sharing with named people runs on `firestore.rules` + one `storage.rules` match.** A
+  share is a Firestore doc whose id (`{ownerUid}_{locatorId}_{recordKey}_{email}`) the
+  Storage rule rebuilds from the path and the reader's verified email. Change the id
+  format, the rule and `src/shares.ts` together, and keep the recipient to `get` on the
+  `.csv` only (no list, no `.bin`, no write).
 - **The Firebase web config stays out of git** (`.env.local`). Its `AIza` key is not a
   secret, but the project's secret scan flags it by design. Scan `git diff --cached` for
   `sk.`/`pk.`/`AIza` before committing.

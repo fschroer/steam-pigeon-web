@@ -39,6 +39,15 @@ Each step names where it is done.
    `localhost` are there by default; only a custom domain has to be added.
 4. **Firebase CLI** — *a terminal on your PC* (Node.js 22+):
    `npm install -g firebase-tools`, then `firebase login`.
+5. **Create the Firestore database** (for sharing with named people) — *Firebase console*
+   → Build → Firestore Database → *Create database*: Standard edition, the `(default)`
+   database, a location near the Storage bucket (for example `nam5` / US), and
+   **production mode**. Firestore holds only the share list; its rules come from
+   `firestore.rules` on the next deploy. Its free daily quota (50,000 reads) is far above
+   what this site uses.
+6. **Let Storage rules check Firestore** — the first `npm run deploy` after step 5 asks to
+   grant the Storage service the permission to read Firestore for its rules. Answer yes.
+   Without it, a shared flight shows "permission denied" for the person it was shared with.
 
 ### Optional: the in-page 3D view
 
@@ -63,6 +72,17 @@ a month as of 2026-11; then about $7 per 1,000). The map never loads on its own.
 The key ends up in the public site bundle, as every browser Maps key does; the
 website and API restrictions above are what protect it.
 
+### Sharing a flight with named people
+
+On a flight's page, *Share with people* takes an email address. That person signs in to
+this site with that address and finds the flight under *Shared with you*. They can view,
+chart and download its CSV, not the raw file, and cannot change or delete it. Remove
+them, or delete the flight, and their access ends. No email is sent; tell them.
+
+The address must be **verified**. Google accounts are; an email/password account made in
+the app may not be, and the site then offers to send a verification link. The design is
+the Locator repo's ADR-0042 amendment "Sharing a flight with named people".
+
 ### A custom domain
 
 After the first deploy: *Firebase console* → Hosting → *Add custom domain*, and add the
@@ -75,9 +95,9 @@ and its `https://` origin to `cors.json`, and rerun step 2. `authDomain` can sta
 From the repo, in the same terminal as step 4:
 
 ```sh
-npm run deploy   # build, then: firebase deploy --only hosting,storage
+npm run deploy   # build, then: firebase deploy --only hosting,storage,firestore
 ```
 
-This publishes the site **and `storage.rules`**. The rules moved here from the Android
+This publishes the site, **`storage.rules` and `firestore.rules`**. The rules moved here from the Android
 repo (`rocket-flight-manager/firebase/storage.rules`); the file is now the live copy, so
 do not edit the rules in the console.

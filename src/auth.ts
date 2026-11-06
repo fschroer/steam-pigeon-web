@@ -1,6 +1,6 @@
 import {
   getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
-  signInWithEmailAndPassword, sendPasswordResetEmail, signOut as fbSignOut, type User,
+  signInWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification, signOut as fbSignOut, type User,
 } from 'firebase/auth';
 import { app } from './firebase';
 
@@ -54,4 +54,20 @@ export function authMessage(e: unknown): string {
     default:
       return (e as Error)?.message ?? String(e);
   }
+}
+
+/** Sends the signed-in user a link that verifies their email address. */
+export async function sendVerification(): Promise<void> {
+  const u = auth().currentUser;
+  if (!u) throw new Error('Not signed in');
+  await sendEmailVerification(u);
+}
+
+/** Reloads the user, so a verification done in another tab shows up. */
+export async function refreshUser(): Promise<User | null> {
+  const u = auth().currentUser;
+  if (!u) return null;
+  await u.reload();
+  await u.getIdToken(true);   // the rules read email_verified from the token
+  return auth().currentUser;
 }

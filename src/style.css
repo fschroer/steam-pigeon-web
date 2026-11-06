@@ -141,3 +141,12 @@ label.check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem
   background: var(--surface-1); color: var(--text-primary);
   border: 1px solid var(--border); box-shadow: 0 1px 4px rgb(0 0 0 / 0.3);
 }
+
+/* Sharing a flight with named people. */
+.share { margin: 1rem 0; }
+.share-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.share-form input { flex: 1 1 16rem; min-width: 0; }
+.share-list { list-style: none; padding: 0; margin: 0.5rem 0; }
+.share-list li { display: flex; gap: 1rem; align-items: center; justify-content: space-between;
+  padding: 0.3rem 0; border-bottom: 1px solid var(--border); max-width: 32rem; }
+.share-list li span { overflow-wrap: anywhere; }

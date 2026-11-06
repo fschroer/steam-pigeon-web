@@ -1,7 +1,8 @@
 import './style.css';
 import type { User } from 'firebase/auth';
 import { configured } from './firebase';
-import { watchUser, signInGoogle, signInEmail, resetPassword, signOut, authMessage } from './auth';
+import { watchUser, signInGoogle, signInEmail, resetPassword, signOut, authMessage, sendVerification, refreshUser } from './auth';
+import { addShare, removeShare, sharesOfRecord, sharedWithMe, normalizeEmail, sharedCsvPath, type Share } from './shares';
 import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, type RecordInfo } from './store';
 import { formatRecordTime, recordId, csvFileName, locatorLabel } from './records';
 import { parseFlightCsv, column, stateChanges, type FlightTable } from './csv';
@@ -134,7 +135,7 @@ async function listView() {
     return;
   }
   if (flights.size === 0) {
-    body.replaceChildren(h('p', {}, 'No flights yet. Records appear here after the app downloads them from a locator and uploads them while you are signed in.'), openLocalSection());
+    body.replaceChildren(h('p', {}, 'No flights yet. Records appear here after the app downloads them from a locator and uploads them while you are signed in.'), sharedSection(), openLocalSection());
     return;
   }
   body.replaceChildren();
@@ -175,7 +176,140 @@ async function listView() {
       ),
     ));
   }
-  body.append(openLocalSection());
+  body.append(sharedSection(), openLocalSection());
+}
+
+// ---- sharing with named people (ADR-0042 amendment, 2026-11-06) --------------------------
+
+/** "Shared with you": records other people shared with this account's email. */
+function sharedSection(): HTMLElement {
+  const section = h('section', { class: 'locator' }, h('h2', {}, 'Shared with you'));
+  const email = user?.email;
+  if (!email) {
+    section.append(h('p', { class: 'muted' }, 'This account has no email address, so nothing can be shared with it.'));
+    return section;
+  }
+  if (!user!.emailVerified) {
+    const status = h('p', { class: 'muted small', 'aria-live': 'polite' });
+    const send = h('button', { type: 'button' }, 'Send verification email');
+    send.addEventListener('click', async () => {
+      send.disabled = true;
+      try { await sendVerification(); status.textContent = `A link was sent to ${email}. Open it, then press “I’ve verified”.`; }
+      catch (err) { status.textContent = authMessage(err); send.disabled = false; }
+    });
+    const done = h('button', { type: 'button', class: 'link' }, 'I’ve verified');
+    done.addEventListener('click', async () => {
+      try { user = await refreshUser(); } catch { /* keep the old state */ }
+      route();
+    });
+    section.append(
+      h('p', { class: 'muted' }, `Flights others share with ${email} show here once that address is verified.`),
+      h('div', { class: 'actions' }, send, done), status);
+    return section;
+  }
+  const list = h('p', { class: 'muted' }, 'Loading…');
+  section.append(list);
+  sharedWithMe(email).then((items) => {
+    if (!items.length) { list.textContent = `Nothing has been shared with ${email} yet.`; return; }
+    const rows = items.map((s) => {
+      const [ts, crc] = s.recordKey.split('_');
+      return h('tr', {},
+        h('td', {}, h('a', { href: `#/shared/${s.ownerUid}/${s.locatorId}/${s.recordKey}` }, formatRecordTime(Number(ts)))),
+        h('td', {}, locatorLabel(s.locatorId, s.locatorName)),
+        h('td', { class: 'muted' }, s.ownerEmail ?? 'unknown owner'),
+        h('td', { class: 'muted' }, crc),
+      );
+    });
+    list.replaceWith(h('table', {},
+      h('thead', {}, h('tr', {}, h('th', {}, 'Flight'), h('th', {}, 'Locator'), h('th', {}, 'Shared by'), h('th', {}, 'Record'))),
+      h('tbody', {}, ...rows)));
+  }).catch((err) => { list.replaceWith(errorBox(`Could not list shared flights: ${(err as Error).message}`)); });
+  return section;
+}
+
+/** On the owner's flight page: who can see this flight, and a field to add someone. */
+function sharePanel(rec: RecordInfo, locatorId: string): HTMLElement {
+  const recordKey = recordId(rec);
+  const section = h('section', { class: 'share' }, h('h2', {}, 'Share with people'));
+  const list = h('ul', { class: 'share-list' });
+  const status = h('p', { class: 'muted small', 'aria-live': 'polite' });
+  const input = h('input', { type: 'email', placeholder: 'name@example.com', 'aria-label': 'Email address to share with' });
+  const add = h('button', { type: 'submit', class: 'primary' }, 'Share');
+
+  const row = (s: Share) => {
+    const remove = h('button', { type: 'button', class: 'link' }, 'Remove');
+    const li = h('li', {}, h('span', {}, s.recipientEmail), remove);
+    remove.addEventListener('click', async () => {
+      remove.disabled = true;
+      try { await removeShare(s.id); li.remove(); status.textContent = `${s.recipientEmail} can no longer open this flight.`; }
+      catch (err) { status.textContent = `Could not remove: ${(err as Error).message}`; remove.disabled = false; }
+    });
+    return li;
+  };
+
+  const form = h('form', {
+    class: 'share-form',
+    onsubmit: async (e: Event) => {
+      e.preventDefault();
+      const email = normalizeEmail(input.value);
+      if (!email) { status.textContent = 'Enter an email address.'; return; }
+      if (email === user!.email?.toLowerCase()) { status.textContent = 'That is your own address.'; return; }
+      add.disabled = true;
+      try {
+        const s = await addShare({
+          ownerUid: user!.uid, ownerEmail: user!.email ?? undefined,
+          locatorId, locatorName: rec.locatorName, recordKey, recipientEmail: email,
+        });
+        if (![...list.querySelectorAll('li span')].some((x) => x.textContent === email)) list.append(row(s));
+        input.value = '';
+        status.textContent = `Shared with ${email}. They see it under “Shared with you” after signing in to this site with that address. No email is sent, so tell them.`;
+      } catch (err) {
+        status.textContent = `Could not share: ${(err as Error).message}`;
+      } finally { add.disabled = false; }
+    },
+  }, input, add);
+
+  section.append(
+    h('p', { class: 'muted small' }, 'They can view, chart and download the CSV, but not change or delete it. You can remove them at any time.'),
+    form, list, status);
+  sharesOfRecord(user!.uid, locatorId, recordKey)
+    .then((items) => list.replaceChildren(...items.map(row)))
+    .catch((err) => { status.textContent = `Could not load who this is shared with: ${(err as Error).message}`; });
+  return section;
+}
+
+/** A flight someone else shared: read-only, from their store. */
+async function sharedFlightView(ownerUid: string, locatorId: string, recordKey: string) {
+  header();
+  const back = h('a', { href: '#/' }, '← All flights');
+  const body = h('div', {}, h('p', { class: 'muted' }, 'Loading…'));
+  show(back, body);
+  let share: Share | undefined;
+  try {
+    share = (await sharedWithMe(user!.email ?? ''))
+      .find((s) => s.ownerUid === ownerUid && s.locatorId === locatorId && s.recordKey === recordKey);
+  } catch { /* the CSV read below gives the real answer */ }
+  const [ts, crc] = recordKey.split('_');
+  const csvPath = sharedCsvPath({ ownerUid, locatorId, recordKey });
+  const name = locatorLabel(locatorId, share?.locatorName);
+  const fileBase = `steam-pigeon_${locatorId}_${recordKey}`;
+  const csvButton = h('button', { type: 'button', class: 'primary' }, 'Download CSV');
+  csvButton.addEventListener('click', () => download(csvPath, `${fileBase}.csv`, csvButton));
+  const kmlButton = h('button', { type: 'button', disabled: true }, 'Google Earth (.kml)');
+  const remove = h('button', { type: 'button', class: 'link' }, 'Remove from my list');
+  remove.addEventListener('click', async () => {
+    if (!share) return;
+    if (!confirm('Remove this flight from “Shared with you”? You will need the owner to share it again to see it.')) return;
+    try { await removeShare(share.id); location.hash = '#/'; }
+    catch (err) { alert(`Could not remove: ${(err as Error).message}`); }
+  });
+  body.replaceChildren(
+    h('h1', {}, formatRecordTime(Number(ts))),
+    h('p', { class: 'muted' }, `${name} · record ${crc} · shared by ${share?.ownerEmail ?? 'another flyer'}`),
+    h('div', { class: 'actions' }, csvButton, kmlButton, share ? remove : null),
+  );
+  await renderFlightData(body, csvPath, kmlButton, `${name}, ${formatRecordTime(Number(ts))}`, `${fileBase}.kml`,
+    'Could not open this flight. The owner may have stopped sharing it or deleted it');
 }
 
 async function download(path: string, name: string, btn: HTMLButtonElement) {
@@ -250,6 +384,9 @@ async function flightView(locatorId: string, id: string) {
     del.disabled = true; del.textContent = 'Deleting…';
     try {
       await deleteRecord(rec);
+      // Its shares would point at nothing; remove them too (best effort).
+      try { await Promise.all((await sharesOfRecord(user!.uid, locatorId, recordId(rec))).map((s) => removeShare(s.id))); }
+      catch { /* the record is gone, which already closes them */ }
       flights = null;
       if (rec.csvPath) tableCache.delete(rec.csvPath);
       location.hash = '#/';
@@ -265,25 +402,31 @@ async function flightView(locatorId: string, id: string) {
     body.append(errorBox('This flight has no CSV in the store, so it cannot be charted here. The raw file can still be downloaded.'));
     return;
   }
+  body.append(sharePanel(rec, locatorId));
+  await renderFlightData(body, rec.csvPath, kmlButton,
+    `${locatorLabel(locatorId, rec.locatorName)}, ${formatRecordTime(rec.recordTs)}`,
+    csvFileName(rec).replace(/\.csv$/, '.kml'), 'Could not load the CSV');
+}
 
+/** Loads a stored CSV and adds the 3D view and charts below [body]. */
+async function renderFlightData(body: HTMLElement, csvPath: string, kmlButton: HTMLButtonElement,
+  kmlName: string, kmlFile: string, failText: string) {
   const loading = h('p', { class: 'muted' }, 'Loading flight data…');
   body.append(loading);
-  let table = tableCache.get(rec.csvPath);
+  let table = tableCache.get(csvPath);
   try {
     if (!table) {
-      table = parseFlightCsv(await fetchCsvText(rec.csvPath));
-      tableCache.set(rec.csvPath, table);
+      table = parseFlightCsv(await fetchCsvText(csvPath));
+      tableCache.set(csvPath, table);
     }
   } catch (err) {
-    loading.replaceWith(errorBox(`Could not load the CSV: ${(err as Error).message}`));
+    loading.replaceWith(errorBox(`${failText}: ${(err as Error).message}`));
     return;
   }
   loading.remove();
   const t = table;
   const path = flightPath(t);
-  wireKml(kmlButton, t, path,
-    `${locatorLabel(locatorId, rec.locatorName)}, ${formatRecordTime(rec.recordTs)}`,
-    csvFileName(rec).replace(/\.csv$/, '.kml'));
+  wireKml(kmlButton, t, path, kmlName, kmlFile);
   body.append(view3d(t, path));
   renderCharts(body, t);
 }
@@ -410,7 +553,9 @@ function route() {
   if (!configured) { notConfiguredView(); return; }
   if (!user) { signInView(); return; }
   const m = /^#\/flight\/(\d+)\/(\d+_[0-9a-f]{8})$/.exec(location.hash);
+  const sh = /^#\/shared\/([A-Za-z0-9]+)\/(\d+)\/(\d+_[0-9a-f]{8})$/.exec(location.hash);
   if (m) void flightView(m[1], m[2]);
+  else if (sh) void sharedFlightView(sh[1], sh[2], sh[3]);
   else if (location.hash === '#/local') localView();
   else void listView();
 }
