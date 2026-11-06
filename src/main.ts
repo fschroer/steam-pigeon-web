@@ -3,7 +3,9 @@ import type { User } from 'firebase/auth';
 import { configured } from './firebase';
 import { watchUser, signInGoogle, signInEmail, resetPassword, signOut, authMessage, sendVerification, refreshUser } from './auth';
 import { addShare, removeShare, sharesOfRecord, sharedWithMe, normalizeEmail, sharedCsvPath, shareMailto, type Share } from './shares';
-import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, saveLocalCsv, type RecordInfo } from './store';
+import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, saveLocalCsv, readPlace, savePlace, type RecordInfo } from './store';
+import { lookupPlace, PLACE_ATTRIBUTION } from './place';
+import type { PathPoint } from './kml';
 import { formatRecordTime, recordId, csvFileName, locatorLabel } from './records';
 import { parseFlightCsv, column, stateChanges, type FlightTable } from './csv';
 import { flightPath, buildKml } from './kml';
@@ -152,17 +154,20 @@ async function listView() {
     };
     const rows = recs.map((r) => {
       const samples = h('td', { class: 'num' }, r.samples !== undefined ? r.samples.toLocaleString() : '…');
+      const place = h('td', {}, r.place ?? '');
       noteName(r);
       if (!('sizeBytes' in r)) {
         loadInfo(r).then((info) => {
           Object.assign(r, info);
           samples.textContent = info.samples !== undefined ? info.samples.toLocaleString() : '–';
+          place.textContent = info.place ?? '';
           noteName(r);
         }).catch(() => { samples.textContent = '–'; });
       }
       const files = [r.csvPath && 'CSV', r.binPath && 'raw'].filter(Boolean).join(' + ');
       return h('tr', {},
         h('td', {}, h('a', { href: `#/flight/${locatorId}/${recordId(r)}` }, formatRecordTime(r.recordTs))),
+        place,
         samples,
         h('td', { class: 'muted' }, files),
       );
@@ -171,7 +176,8 @@ async function listView() {
       heading,
       h('table', {},
         h('thead', {}, h('tr', {},
-          h('th', {}, 'Flight'), h('th', { class: 'num' }, 'Samples'), h('th', {}, 'Files'))),
+          h('th', {}, 'Flight'), h('th', { title: 'Named the first time the flight is opened' }, 'Place'),
+          h('th', { class: 'num' }, 'Samples'), h('th', {}, 'Files'))),
         h('tbody', {}, ...rows),
       ),
     ));
@@ -213,15 +219,18 @@ function sharedSection(): HTMLElement {
     if (!items.length) { list.textContent = `Nothing has been shared with ${email} yet.`; return; }
     const rows = items.map((s) => {
       const [ts, crc] = s.recordKey.split('_');
+      const place = h('td', {});
+      readPlace(sharedCsvPath(s)).then((p) => { place.textContent = p ?? ''; });
       return h('tr', {},
         h('td', {}, h('a', { href: `#/shared/${s.ownerUid}/${s.locatorId}/${s.recordKey}` }, formatRecordTime(Number(ts)))),
+        place,
         h('td', {}, locatorLabel(s.locatorId, s.locatorName)),
         h('td', { class: 'muted' }, s.ownerEmail ?? 'unknown owner'),
         h('td', { class: 'muted' }, crc),
       );
     });
     list.replaceWith(h('table', {},
-      h('thead', {}, h('tr', {}, h('th', {}, 'Flight'), h('th', {}, 'Locator'), h('th', {}, 'Shared by'), h('th', {}, 'Record'))),
+      h('thead', {}, h('tr', {}, h('th', {}, 'Flight'), h('th', {}, 'Place'), h('th', {}, 'Locator'), h('th', {}, 'Shared by'), h('th', {}, 'Record'))),
       h('tbody', {}, ...rows)));
   }).catch((err) => { list.replaceWith(errorBox(`Could not list shared flights: ${(err as Error).message}`)); });
   return section;
@@ -312,13 +321,13 @@ async function sharedFlightView(ownerUid: string, locatorId: string, recordKey: 
     try { await removeShare(share.id); location.hash = '#/'; }
     catch (err) { alert(`Could not remove: ${(err as Error).message}`); }
   });
-  body.replaceChildren(
-    h('h1', {}, formatRecordTime(Number(ts))),
-    h('p', { class: 'muted' }, `${name} · record ${crc} · shared by ${share?.ownerEmail ?? 'another flyer'}`),
-    h('div', { class: 'actions' }, csvButton, kmlButton, share ? remove : null),
-  );
+  const title = h('h1', {}, formatRecordTime(Number(ts)));
+  const sub = h('p', { class: 'muted' }, `${name} · record ${crc} · shared by ${share?.ownerEmail ?? 'another flyer'}`);
+  body.replaceChildren(title, sub, h('div', { class: 'actions' }, csvButton, kmlButton, share ? remove : null));
+  // Only the owner can keep the name on the file, so a recipient just looks it up.
   await renderFlightData(body, csvPath, kmlButton, `${name}, ${formatRecordTime(Number(ts))}`, `${fileBase}.kml`,
-    'Could not open this flight. The owner may have stopped sharing it or deleted it');
+    'Could not open this flight. The owner may have stopped sharing it or deleted it',
+    { known: () => readPlace(csvPath), show: placeShower(title, sub, formatRecordTime(Number(ts))) });
 }
 
 async function download(path: string, name: string, btn: HTMLButtonElement) {
@@ -412,14 +421,45 @@ async function flightView(locatorId: string, id: string) {
     return;
   }
   body.append(sharePanel(rec, locatorId));
-  await renderFlightData(body, rec.csvPath, kmlButton,
+  const csvPath = rec.csvPath;
+  await renderFlightData(body, csvPath, kmlButton,
     `${locatorLabel(locatorId, rec.locatorName)}, ${formatRecordTime(rec.recordTs)}`,
-    csvFileName(rec).replace(/\.csv$/, '.kml'), 'Could not load the CSV');
+    csvFileName(rec).replace(/\.csv$/, '.kml'), 'Could not load the CSV', {
+      known: async () => (await loadInfo(rec).catch(() => rec as RecordInfo)).place,
+      save: async (p) => { await savePlace(csvPath, p); rec.place = p; },
+      show: placeShower(title, sub, formatRecordTime(rec.recordTs)),
+    });
+}
+
+interface PlaceHooks {
+  /** The name already kept for this flight, if any. */
+  known?: () => Promise<string | undefined>;
+  /** Keeps a looked-up name (the owner only). */
+  save?: (place: string) => Promise<void>;
+  show: (place: string) => void;
+}
+
+/** Names the launch site from the pad's fix: the kept name, else one lookup (src/place.ts). */
+async function resolvePlace(path: PathPoint[], hooks: PlaceHooks) {
+  let place = await hooks.known?.().catch(() => undefined);
+  if (!place && path.length) {
+    place = await lookupPlace(path[0].lat, path[0].lon);
+    if (place && hooks.save) hooks.save(place).catch(() => { /* shown anyway; looked up again next time */ });
+  }
+  if (place) hooks.show(place);
+}
+
+/** Puts the place in the page title, with the attribution OpenStreetMap asks for. */
+function placeShower(title: HTMLElement, after: HTMLElement, time: string): (place: string) => void {
+  return (place) => {
+    title.textContent = `${time} · ${place}`;
+    after.after(h('p', { class: 'muted small attribution' }, PLACE_ATTRIBUTION));
+  };
 }
 
 /** Loads a stored CSV and adds the 3D view and charts below [body]. */
 async function renderFlightData(body: HTMLElement, csvPath: string, kmlButton: HTMLButtonElement,
-  kmlName: string, kmlFile: string, failText: string) {
+  kmlName: string, kmlFile: string, failText: string, place?: PlaceHooks) {
   const loading = h('p', { class: 'muted' }, 'Loading flight data…');
   body.append(loading);
   let table = tableCache.get(csvPath);
@@ -435,6 +475,7 @@ async function renderFlightData(body: HTMLElement, csvPath: string, kmlButton: H
   loading.remove();
   const t = table;
   const path = flightPath(t);
+  if (place) void resolvePlace(path, place);
   wireKml(kmlButton, t, path, kmlName, kmlFile);
   body.append(view3d(t, path));
   renderCharts(body, t);
@@ -568,13 +609,12 @@ function localView() {
       save.disabled = false; save.textContent = 'Save to my flights';
     }
   });
-  const body = h('div', {},
-    h('h1', {}, name),
-    h('p', { class: 'muted' }, 'From your computer, not the web store. Reloading the page closes it. Save it to your flights to share it.'),
-    h('div', { class: 'actions' }, save, kmlButton),
-  );
+  const title = h('h1', {}, name);
+  const sub = h('p', { class: 'muted' }, 'From your computer, not the web store. Reloading the page closes it. Save it to your flights to share it.');
+  const body = h('div', {}, title, sub, h('div', { class: 'actions' }, save, kmlButton));
   show(back, body);
   const path = flightPath(t);
+  void resolvePlace(path, { show: placeShower(title, sub, name) });
   wireKml(kmlButton, t, path, name.replace(/\.csv$/i, ''), name.replace(/\.csv$/i, '') + '.kml');
   body.append(view3d(t, path));
   renderCharts(body, t);

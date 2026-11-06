@@ -1,4 +1,4 @@
-import { getStorage, ref, listAll, getMetadata, getBlob, getDownloadURL, deleteObject, uploadString } from 'firebase/storage';
+import { getStorage, ref, listAll, getMetadata, getBlob, getDownloadURL, deleteObject, uploadString, updateMetadata } from 'firebase/storage';
 import { app } from './firebase';
 import { groupRecords, recordsPrefix, recordId, crc32Hex, flightTimeFromCsv, COMPUTER_LOCATOR_ID, type RecordRef } from './records';
 
@@ -7,6 +7,8 @@ export interface RecordInfo extends RecordRef {
   slot?: number;
   /** The locator's own name at upload time; absent on uploads before 2026-11-05. */
   locatorName?: string;
+  /** The launch site's name, kept once the flight page has looked it up (src/place.ts). */
+  place?: string;
   sizeBytes?: number;
 }
 
@@ -34,7 +36,7 @@ export async function loadInfo(r: RecordRef): Promise<RecordInfo> {
   const m = await getMetadata(ref(storage(), path));
   const c = m.customMetadata ?? {};
   const num = (s?: string) => (s !== undefined && s !== '' && Number.isFinite(Number(s)) ? Number(s) : undefined);
-  return { ...r, samples: num(c.samples), slot: num(c.slot), sizeBytes: m.size, locatorName: c.locator_name?.trim() || undefined };
+  return { ...r, samples: num(c.samples), slot: num(c.slot), sizeBytes: m.size, locatorName: c.locator_name?.trim() || undefined, place: c.place?.trim() || undefined };
 }
 
 export async function fetchCsvText(path: string): Promise<string> {
@@ -94,4 +96,19 @@ export async function saveLocalCsv(uid: string, text: string, fileName: string, 
     });
   }
   return { locatorId: COMPUTER_LOCATOR_ID, recordKey };
+}
+
+/** The `place` custom metadata of any readable CSV (the owner's or one shared with this user). */
+export async function readPlace(path: string): Promise<string | undefined> {
+  try {
+    const m = await getMetadata(ref(storage(), path));
+    return m.customMetadata?.place?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Keeps the launch site's name on the owner's CSV; other custom metadata is left as it is. */
+export async function savePlace(path: string, place: string): Promise<void> {
+  await updateMetadata(ref(storage(), path), { customMetadata: { place } });
 }
