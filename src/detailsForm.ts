@@ -11,6 +11,17 @@ import { manufacturers, motors, IMPULSE_CLASSES, type TcMotor } from './thrustcu
 
 let listSeq = 0;
 
+/**
+ * The suggestion Tab should take for typed text: unchanged on an exact match,
+ * else the first option whose value or label contains it, ignoring case.
+ */
+export function firstMatch(typed: string, options: { value: string; label?: string }[]): string | undefined {
+  const t = typed.trim().toLowerCase();
+  if (!t) return undefined;
+  if (options.some((o) => o.value.toLowerCase() === t)) return options.find((o) => o.value.toLowerCase() === t)!.value;
+  return options.find((o) => o.value.toLowerCase().includes(t) || (o.label ?? '').toLowerCase().includes(t))?.value;
+}
+
 /** A text field with a suggestion list. Returns the field and a way to change the suggestions. */
 function combo(value: string, placeholder: string, label: string, options: string[] = []) {
   const id = `dl${++listSeq}`;
@@ -19,6 +30,15 @@ function combo(value: string, placeholder: string, label: string, options: strin
   const setOptions = (opts: { value: string; label?: string }[]) =>
     list.replaceChildren(...opts.map((o) => h('option', { value: o.value }, o.label ?? '')));
   setOptions(options.map((v) => ({ value: v })));
+  // Tab after a few letters takes the first suggestion that matches, the way the
+  // browser's own list filters (value or label containing the text, in list order).
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab' || e.shiftKey) return;
+    const pick = firstMatch(input.value, [...list.options].map((o) => ({ value: o.value, label: o.label })));
+    if (pick === undefined || pick === input.value) return;
+    input.value = pick;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   return { input, list, setOptions, wrap: h('label', { class: 'field' }, label, input, list) };
 }
 

@@ -32,3 +32,19 @@ describe('flight details', () => {
     expect(detailsId('U', '42', '1_0000abcd')).toBe('U_42_1_0000abcd');
   });
 });
+
+import { firstMatch } from '../src/detailsForm';
+
+describe('Tab completion', () => {
+  const opts = [{ value: 'AeroTech', label: 'AeroTech' }, { value: 'Cesaroni', label: 'Cesaroni Technology' }, { value: 'Estes', label: 'Estes Industries' }];
+  it('takes the first match in list order', () => {
+    expect(firstMatch('ces', opts)).toBe('Cesaroni');
+    expect(firstMatch('tech', opts)).toBe('AeroTech');
+    expect(firstMatch('industries', opts)).toBe('Estes');
+  });
+  it('keeps an exact match and leaves no match alone', () => {
+    expect(firstMatch('estes', opts)).toBe('Estes');
+    expect(firstMatch('zzz', opts)).toBeUndefined();
+    expect(firstMatch('  ', opts)).toBeUndefined();
+  });
+});
