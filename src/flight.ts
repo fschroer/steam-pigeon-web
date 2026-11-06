@@ -3,6 +3,7 @@ import { h } from './dom';
 import { column, stateChanges, type FlightTable } from './csv';
 import { PANELS, DEFAULT_SELECTION, flightStateName } from './channels';
 import { panelChart, destroyChart, seriesColor } from './chart';
+import { currentUnits, panelUnits } from './units';
 
 let charts: uPlot[] = [];
 
@@ -39,6 +40,7 @@ export function renderCharts(body: HTMLElement, table: FlightTable) {
   const markers = state ? stateChanges(x, state) : [];
 
   const selection = loadSelection();
+  const units = currentUnits();
   const available = PANELS
     .map((p) => ({ panel: p, slots: p.columns.map((c, i) => (table.columns.includes(c) ? i : -1)).filter((i) => i >= 0) }))
     .filter((p) => p.slots.length > 0);
@@ -47,7 +49,8 @@ export function renderCharts(body: HTMLElement, table: FlightTable) {
   const picker = h('details', { class: 'picker', open: window.matchMedia('(min-width: 700px)').matches }, h('summary', {}, 'Series'));
   const grid = h('div', { class: 'picker-grid' });
   for (const { panel, slots } of available) {
-    const group = h('fieldset', {}, h('legend', {}, panel.unit ? `${panel.title} (${panel.unit})` : panel.title));
+    const shownUnit = panelUnits(panel, units).unit;
+    const group = h('fieldset', {}, h('legend', {}, shownUnit ? `${panel.title} (${shownUnit})` : panel.title));
     for (const slot of slots) {
       const col = panel.columns[slot];
       const cb = h('input', { type: 'checkbox', checked: selection.has(col) });
@@ -84,10 +87,15 @@ export function renderCharts(body: HTMLElement, table: FlightTable) {
       const chosen = slots.filter((s) => selection.has(panel.columns[s]));
       if (!chosen.length) continue;
       const host = h('div', { class: 'chart' });
-      chartsHost.append(h('figure', {}, h('figcaption', {}, panel.unit ? `${panel.title} (${panel.unit})` : panel.title), host));
+      // Charted in the viewer's units; the CSV itself is SI and stays so.
+      const { unit, convert } = panelUnits(panel, units);
+      const shown = { ...panel, unit };
+      chartsHost.append(h('figure', {}, h('figcaption', {}, unit ? `${panel.title} (${unit})` : panel.title), host));
       const u = panelChart(host, {
-        panel, x,
-        series: chosen.map((slot) => ({ slot, data: column(table, panel.columns[slot])! })),
+        panel: shown, x,
+        series: chosen.map((slot) => ({
+          slot, data: column(table, panel.columns[slot])!.map((v) => (v === null ? null : convert(v))),
+        })),
         markers,
         labelMarkers: first,
         onZoom: (min, max) => {

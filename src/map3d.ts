@@ -17,6 +17,7 @@
 // at sea level instead put the target hundreds of meters underground at a high
 // site (Black Rock, about 1,190 m) and cut off the top of the flight.
 
+import { altitudeText, currentUnits, type Units } from './units';
 import { column, type FlightTable } from './csv';
 import { orbitFor, type PathPoint, type PathEvent } from './kml';
 import { flightStateName } from './channels';
@@ -120,8 +121,8 @@ export function hoverPoints(path: PathPoint[], minGapS = 0.1, max = 2500): PathP
 }
 
 /** The text the 3D view shows for a path point under the pointer. */
-export function readoutText(p: PathPoint): string {
-  return `${p.t.toFixed(1)} s · ${p.agl.toFixed(0)} m AGL`;
+export function readoutText(p: PathPoint, units: Units = 'metric'): string {
+  return `${p.t.toFixed(1)} s · ${altitudeText(p.agl, units)} AGL`;
 }
 
 /** A hover point's dot: the path's solid orange, about the line's width, so it blends in. */
@@ -206,9 +207,9 @@ export async function showFlight3D(host: HTMLElement, path: PathPoint[], events:
       img.src = dot; img.width = HOVER_DOT_PX; img.height = HOVER_DOT_PX;
       tpl.content.append(img);
       m.append(tpl);
-      m.addEventListener('gmp-pointerover', () => { readout.textContent = readoutText(p); readout.hidden = false; });
+      m.addEventListener('gmp-pointerover', () => { readout.textContent = readoutText(p, currentUnits()); readout.hidden = false; });
       m.addEventListener('gmp-pointerout', () => { readout.hidden = true; });
-      m.addEventListener('gmp-click', () => { readout.textContent = readoutText(p); readout.hidden = false; });
+      m.addEventListener('gmp-click', () => { readout.textContent = readoutText(p, currentUnits()); readout.hidden = false; });
       map.append(m);
     }
   }
