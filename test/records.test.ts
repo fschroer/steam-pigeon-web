@@ -59,3 +59,14 @@ describe('saving a CSV from the computer', () => {
     expect(label2('0')).toBe('Saved from your computer');
   });
 });
+
+import { fileStem } from '../src/store';
+
+describe('fileStem', () => {
+  it('drops the folder and .csv', () => {
+    expect(fileStem('Red Ryder Revisited_2026-09-26_09-07-35.csv')).toBe('Red Ryder Revisited_2026-09-26_09-07-35');
+    expect(fileStem('C:\\Flights\\Shane.CSV')).toBe('Shane');
+    expect(fileStem('  ')).toBeUndefined();
+    expect(fileStem(undefined)).toBeUndefined();
+  });
+});
