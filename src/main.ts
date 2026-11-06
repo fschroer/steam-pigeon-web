@@ -477,7 +477,16 @@ function view3d(t: FlightTable, path: ReturnType<typeof flightPath>): HTMLElemen
       fly.addEventListener('click', () => v.flyAround());
       const reset = h('button', { type: 'button' }, 'Reset view');
       reset.addEventListener('click', () => v.resetView());
-      controls.replaceChildren(fly, reset);
+      // Hiding keeps the loaded map, so showing it again is not another billed load.
+      const toggle = h('button', { type: 'button' }, 'Hide 3D view');
+      toggle.addEventListener('click', () => {
+        const hide = !host.hidden;
+        if (hide) v.stop();
+        host.hidden = hide;
+        fly.hidden = hide; reset.hidden = hide;
+        toggle.textContent = hide ? 'Show 3D view' : 'Hide 3D view';
+      });
+      controls.replaceChildren(fly, reset, toggle);
     } catch (err) {
       host.remove();
       show.disabled = false; show.textContent = 'Show 3D view';

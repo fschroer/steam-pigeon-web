@@ -151,3 +151,6 @@ label.check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem
   padding: 0.3rem 0; border-bottom: 1px solid var(--border); max-width: 32rem; }
 .share-list li span { overflow-wrap: anywhere; }
 .share-actions { display: flex; gap: 1rem; align-items: center; flex-shrink: 0; }
+
+/* The hidden attribute always wins over a display set above. */
+[hidden] { display: none !important; }

@@ -163,6 +163,8 @@ function loadMaps3d(key: string): Promise<Maps3d> {
 export interface Flight3D {
   map: HTMLElement;
   flyAround(): void;
+  /** Stops a fly-around or fly-to in progress. */
+  stop(): void;
   resetView(): void;
 }
 
@@ -249,6 +251,7 @@ export async function showFlight3D(host: HTMLElement, path: PathPoint[], events:
   }
   return {
     map,
+    stop: () => map.stopCameraAnimation?.(),
     flyAround: () => map.flyCameraAround({ camera, durationMillis: 30_000, repeatCount: 1 }),
     resetView: () => map.flyCameraTo({ endCamera: camera, durationMillis: 1_500 }),
   };
