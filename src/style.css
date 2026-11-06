@@ -150,3 +150,4 @@ label.check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem
 .share-list li { display: flex; gap: 1rem; align-items: center; justify-content: space-between;
   padding: 0.3rem 0; border-bottom: 1px solid var(--border); max-width: 32rem; }
 .share-list li span { overflow-wrap: anywhere; }
+.share-actions { display: flex; gap: 1rem; align-items: center; flex-shrink: 0; }

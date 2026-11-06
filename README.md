@@ -77,7 +77,7 @@ website and API restrictions above are what protect it.
 On a flight's page, *Share with people* takes an email address. That person signs in to
 this site with that address and finds the flight under *Shared with you*. They can view,
 chart and download its CSV, not the raw file, and cannot change or delete it. Remove
-them, or delete the flight, and their access ends. No email is sent; tell them.
+them, or delete the flight, and their access ends. The site sends no email itself; *Tell them by email* opens your own email app with a drafted note and the link.
 
 The address must be **verified**. Google accounts are; an email/password account made in
 the app may not be, and the site then offers to send a verification link. The design is

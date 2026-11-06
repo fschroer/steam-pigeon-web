@@ -2,7 +2,7 @@ import './style.css';
 import type { User } from 'firebase/auth';
 import { configured } from './firebase';
 import { watchUser, signInGoogle, signInEmail, resetPassword, signOut, authMessage, sendVerification, refreshUser } from './auth';
-import { addShare, removeShare, sharesOfRecord, sharedWithMe, normalizeEmail, sharedCsvPath, type Share } from './shares';
+import { addShare, removeShare, sharesOfRecord, sharedWithMe, normalizeEmail, sharedCsvPath, shareMailto, type Share } from './shares';
 import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, type RecordInfo } from './store';
 import { formatRecordTime, recordId, csvFileName, locatorLabel } from './records';
 import { parseFlightCsv, column, stateChanges, type FlightTable } from './csv';
@@ -236,9 +236,15 @@ function sharePanel(rec: RecordInfo, locatorId: string): HTMLElement {
   const input = h('input', { type: 'email', placeholder: 'name@example.com', 'aria-label': 'Email address to share with' });
   const add = h('button', { type: 'submit', class: 'primary' }, 'Share');
 
+  const flight = `${formatRecordTime(rec.recordTs)}, ${locatorLabel(locatorId, rec.locatorName)}`;
+  const mailLink = (s: Share, text: string) => h('a', {
+    href: shareMailto(s.recipientEmail, flight,
+      `${location.origin}${location.pathname}#/shared/${s.ownerUid}/${s.locatorId}/${s.recordKey}`,
+      user!.displayName || user!.email || undefined),
+  }, text);
   const row = (s: Share) => {
     const remove = h('button', { type: 'button', class: 'link' }, 'Remove');
-    const li = h('li', {}, h('span', {}, s.recipientEmail), remove);
+    const li = h('li', {}, h('span', {}, s.recipientEmail), h('span', { class: 'share-actions' }, mailLink(s, 'Email'), remove));
     remove.addEventListener('click', async () => {
       remove.disabled = true;
       try { await removeShare(s.id); li.remove(); status.textContent = `${s.recipientEmail} can no longer open this flight.`; }
@@ -262,7 +268,10 @@ function sharePanel(rec: RecordInfo, locatorId: string): HTMLElement {
         });
         if (![...list.querySelectorAll('li span')].some((x) => x.textContent === email)) list.append(row(s));
         input.value = '';
-        status.textContent = `Shared with ${email}. They see it under “Shared with you” after signing in to this site with that address. No email is sent, so tell them.`;
+        status.replaceChildren(
+          `Shared with ${email}. They see it under “Shared with you” after signing in with that address. `,
+          mailLink(s, 'Tell them by email'),
+          ' (opens your email app with a note and the link).');
       } catch (err) {
         status.textContent = `Could not share: ${(err as Error).message}`;
       } finally { add.disabled = false; }

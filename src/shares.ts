@@ -93,3 +93,22 @@ export async function sharedWithMe(email: string): Promise<Share[]> {
   const ts = (s: Share) => Number(s.recordKey.split('_')[0]) || 0;
   return snap.docs.map((d) => fromDoc(d.id, d.data())).sort((a, b) => ts(b) - ts(a));
 }
+
+/**
+ * A mailto: link that opens the owner's own email app with a note to the
+ * recipient: what was shared and where to open it. The site sends no email
+ * (no server), so this is how the person hears of it.
+ */
+export function shareMailto(recipient: string, flight: string, link: string, from?: string): string {
+  const subject = `Steam Pigeon flight shared with you: ${flight}`;
+  const body = [
+    `${from ? `${from} has` : 'I have'} shared a Steam Pigeon flight with you: ${flight}.`,
+    '',
+    `Open it here, signed in as ${recipient}:`,
+    link,
+    '',
+    'It is also listed under "Shared with you" on the site. A Google account with this',
+    'address works, or an email/password account once the address is verified.',
+  ].join('\n');
+  return `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeEmail, shareId, sharedCsvPath } from '../src/shares';
+import { normalizeEmail, shareId, sharedCsvPath, shareMailto } from '../src/shares';
 
 describe('shares', () => {
   it('normalizes an address the way the rules compare it', () => {
@@ -17,5 +17,14 @@ describe('shares', () => {
   it('points at the owner’s CSV', () => {
     expect(sharedCsvPath({ ownerUid: 'UID123', locatorId: '42', recordKey: '1_0000abcd' }))
       .toBe('users/UID123/locators/42/1_0000abcd.csv');
+  });
+
+  it('drafts an email with the flight and the link', () => {
+    const m = shareMailto('bob@y.com', 'Sep 26, 2026, Red Ryder (42)', 'https://steam-pigeon.web.app/#/shared/U/42/1_0000abcd', 'Frank');
+    expect(m.startsWith('mailto:bob%40y.com?subject=')).toBe(true);
+    const body = decodeURIComponent(m.split('&body=')[1]);
+    expect(body).toContain('Frank has shared a Steam Pigeon flight with you: Sep 26, 2026, Red Ryder (42).');
+    expect(body).toContain('https://steam-pigeon.web.app/#/shared/U/42/1_0000abcd');
+    expect(body).toContain('signed in as bob@y.com');
   });
 });
