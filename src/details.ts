@@ -49,7 +49,7 @@ export const ROCKET_MAKERS = [
  */
 export const ELECTRONICS = [
   'Altus Metrum EasyMega', 'Altus Metrum EasyMini', 'Altus Metrum TeleMega', 'Altus Metrum TeleMetrum',
-  'Big Red Bee GPS', 'Eggtimer Apogee', 'Eggtimer Eggfinder', 'Eggtimer Proton', 'Eggtimer Quantum', 'Eggtimer Quasar',
+  'Big Red Bee GPS', 'Eggtimer Apogee', 'Eggtimer Eggfinder', 'Eggtimer Proton', 'Eggtimer Quantum', 'Eggtimer Quark', 'Eggtimer Quasar',
   'Entacore AIM', 'Featherweight Blue Raven', 'Featherweight GPS Tracker', 'Featherweight Raven',
   'Jolly Logic AltimeterThree', 'Jolly Logic Chute Release', 'Missile Works RRC2+', 'Missile Works RRC3',
   'PerfectFlite Firefly', 'PerfectFlite Pnut', 'PerfectFlite StratoLoggerCF', 'Steam Pigeon locator',
