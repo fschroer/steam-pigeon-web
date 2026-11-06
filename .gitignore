@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.firebase/
+*.log
+# The Firebase web config: not secret (the Storage rules guard the data), but
+# its AIza key trips the project's pre-commit secret scan, so it stays out of git.
+.env.local
+.env.*.local

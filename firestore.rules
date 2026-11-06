@@ -1,0 +1,83 @@
+rules_version = '2';
+
+// Firestore rules for the steam-pigeon project (locator ADR-0042, amendment
+// "Sharing a flight with named people", 2026-11-06). Deployed with the site:
+// `firebase deploy --only firestore:rules`. Do not edit them in the console.
+//
+// Firestore holds one thing: shares. A share says that the owner lets one
+// email address read one record. Its id is
+//   {ownerUid}_{locatorId}_{recordKey}_{recipientEmail}
+// so storage.rules can check a share exists with a single lookup. The owner
+// creates and removes it; the recipient can read it and remove it from their
+// own list. Nobody updates one. Everything else is closed.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /shares/{id} {
+      function signedIn() { return request.auth != null; }
+      function myEmail() { return request.auth.token.get('email', '').lower(); }
+      function verified() { return request.auth.token.get('email_verified', false) == true; }
+      function isOwner(d) { return d.ownerUid == request.auth.uid; }
+      function isRecipient(d) { return verified() && myEmail() != '' && d.recipientEmail == myEmail(); }
+
+      allow read, delete: if signedIn() && (isOwner(resource.data) || isRecipient(resource.data));
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(
+             ['ownerUid', 'ownerEmail', 'locatorId', 'locatorName', 'recordKey', 'recipientEmail', 'createdAt'])
+        && request.resource.data.keys().hasAll(
+             ['ownerUid', 'locatorId', 'recordKey', 'recipientEmail', 'createdAt'])
+        && isOwner(request.resource.data)
+        && request.resource.data.locatorId is string
+        && request.resource.data.locatorId.matches('^[0-9]{1,12}$')
+        && request.resource.data.recordKey is string
+        && request.resource.data.recordKey.matches('^[0-9]{1,12}_[0-9a-f]{8}$')
+        && request.resource.data.recipientEmail is string
+        && request.resource.data.recipientEmail.size() <= 254
+        && request.resource.data.recipientEmail == request.resource.data.recipientEmail.lower()
+        && request.resource.data.recipientEmail.matches('^[^@/\\s]+@[^@/\\s]+[.][^@/\\s]+$')
+        && request.resource.data.recipientEmail != myEmail()
+        && (!('ownerEmail' in request.resource.data) || request.resource.data.ownerEmail == myEmail())
+        && (!('locatorName' in request.resource.data)
+            || (request.resource.data.locatorName is string && request.resource.data.locatorName.size() <= 64))
+        && request.resource.data.createdAt == request.time
+        && id == request.resource.data.ownerUid + '_' + request.resource.data.locatorId + '_'
+                 + request.resource.data.recordKey + '_' + request.resource.data.recipientEmail;
+
+      allow update: if false;
+    }
+
+    // Flight details (ADR-0042 amendment "Flight details", 2026-11-06): rocket,
+    // motors, recovery, electronics and a notes log, one document per record,
+    // id {ownerUid}_{locatorId}_{recordKey}. That id is also the start of every
+    // share id for the record, so a recipient's read is one exists() lookup.
+    match /flights/{id} {
+      function isMine() { return request.auth != null && id.split('_')[0] == request.auth.uid; }
+      function sharedWithMe() {
+        return request.auth != null
+          && request.auth.token.get('email_verified', false) == true
+          && request.auth.token.get('email', '') != ''
+          && exists(/databases/$(database)/documents/shares/$(id + '_' + request.auth.token.email.lower()));
+      }
+      function short(d, k, n) { return !(k in d) || (d[k] is string && d[k].size() <= n); }
+      function valid(d) {
+        return d.keys().hasOnly(['ownerUid', 'locatorId', 'recordKey', 'rocketMaker', 'rocketName',
+                                 'motors', 'recovery', 'electronics', 'notes', 'updatedAt'])
+          && d.ownerUid == request.auth.uid
+          && d.locatorId is string && d.recordKey is string
+          && id == d.ownerUid + '_' + d.locatorId + '_' + d.recordKey
+          && short(d, 'rocketMaker', 100) && short(d, 'rocketName', 100)
+          && short(d, 'recovery', 40) && short(d, 'electronics', 500)
+          && short(d, 'notes', 50000)
+          && (!('motors' in d) || (d.motors is list && d.motors.size() <= 8))
+          && d.updatedAt == request.time;
+      }
+      allow read: if isMine() || sharedWithMe();
+      allow create, update: if isMine() && valid(request.resource.data);
+      allow delete: if isMine();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

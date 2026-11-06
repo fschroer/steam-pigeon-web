@@ -1,0 +1,11 @@
+[
+  {
+    "origin": [
+      "https://steam-pigeon.web.app",
+      "https://steam-pigeon.firebaseapp.com",
+      "http://localhost:5173"
+    ],
+    "method": ["GET"],
+    "maxAgeSeconds": 3600
+  }
+]
