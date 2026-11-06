@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { utcOffsetText } from '../src/time';
 import { appendLog, cleanDetails, emptyDetails, motorSummary, parseDelays, logStamp, EX_MOTOR, detailsId } from '../src/details';
 
 describe('flight details', () => {
   it('stamps and appends a log entry', () => {
     const d = new Date(2026, 10, 6, 21, 5);
-    expect(logStamp(d)).toBe('2026-11-06 21:05');
+    const z = utcOffsetText(d);
+    expect(z).toMatch(/^[+-]\d\d:\d\d$/);
+    expect(logStamp(d)).toBe(`2026-11-06 21:05 ${z}`);
     const one = appendLog('', '  Good flight ', d);
-    expect(one).toBe('[2026-11-06 21:05] Good flight');
-    expect(appendLog(one + '\n\n', 'Main late', d)).toBe('[2026-11-06 21:05] Good flight\n[2026-11-06 21:05] Main late');
+    expect(one).toBe(`[2026-11-06 21:05 ${z}] Good flight`);
+    expect(appendLog(one + '\n\n', 'Main late', d)).toBe(`[2026-11-06 21:05 ${z}] Good flight\n[2026-11-06 21:05 ${z}] Main late`);
     expect(appendLog(one, '   ', d)).toBe(one);
   });
 

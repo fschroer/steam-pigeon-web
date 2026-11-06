@@ -55,6 +55,13 @@ describe('saving a CSV from the computer', () => {
       .toBe(Date.UTC(2026, 8, 26, 16, 7, 35) / 1000);
     expect(flightTimeFromCsv('time_ms,x\n0,1\n')).toBeUndefined();
   });
+  it('reads an offset-labeled flight time (ADR-0043)', () => {
+    const utc = Date.UTC(2026, 10, 6, 7, 36, 49) / 1000;
+    expect(flightTimeFromCsv('Flight time: 2026-11-05 23:36:49 -08:00\r\n')).toBe(utc);
+    expect(flightTimeFromCsv('Flight time: 2026-11-06 13:21:49 +05:45\r\n')).toBe(utc);
+    expect(flightTimeFromCsv('Flight time: 2026-11-06 07:36:49 UTC\r\n')).toBe(utc);
+    expect(flightTimeFromCsv('Flight time: 2026-11-06T07:36:49Z\n')).toBe(utc);
+  });
   it('titles the computer folder', () => {
     expect(label2('0')).toBe('Saved from your computer');
   });

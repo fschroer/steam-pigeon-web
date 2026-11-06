@@ -5,6 +5,7 @@
 
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore/lite';
 import { app } from './firebase';
+import { utcOffsetText } from './time';
 
 export interface MotorEntry {
   /** ThrustCurve manufacturer abbreviation, EX_MOTOR, or anything typed. */
@@ -72,10 +73,10 @@ export function emptyMotor(): MotorEntry {
   return { maker: '', impulse: '', motor: '', delay: '' };
 }
 
-/** The log line's stamp: local date and time to the minute, e.g. 2026-11-06 21:30. */
+/** The log line's stamp: local date and time to the minute with the offset, e.g. 2026-11-06 21:30 -08:00. */
 export function logStamp(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())} ${utcOffsetText(d)}`;
 }
 
 /** Adds one stamped entry at the end of the log. */
