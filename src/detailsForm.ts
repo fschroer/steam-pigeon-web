@@ -4,7 +4,7 @@
 
 import { h } from './dom';
 import {
-  loadDetails, saveDetails, appendLog, emptyMotor, motorSummary, parseDelays,
+  loadDetails, saveDetails, appendLog, cleanDetails, emptyMotor, motorSummary, parseDelays,
   EX_MOTOR, RECOVERY_TYPES, ROCKET_MAKERS, ELECTRONICS, splitElectronics, joinElectronics,
   type FlightDetails, type MotorEntry,
 } from './details';
@@ -195,7 +195,8 @@ function detailsReadOnly(d: FlightDetails): HTMLElement {
 }
 
 export function detailsSection(ownerUid: string, locatorId: string, recordKey: string, editable: boolean): HTMLElement {
-  const section = h('section', { class: 'details' }, h('h2', {}, 'Flight details'));
+  const status = h('span', { class: 'muted small save-status', 'aria-live': 'polite' });
+  const section = h('section', { class: 'details' }, h('h2', {}, 'Flight details ', status));
   const body = h('div', {}, h('p', { class: 'muted' }, 'Loading…'));
   section.append(body);
 
@@ -241,19 +242,50 @@ export function detailsSection(ownerUid: string, locatorId: string, recordKey: s
     const logWrap = h('label', { class: 'field wide' }, 'Log', log);
     logWrap.hidden = !d.notes;
 
-    const status = h('span', { class: 'muted small', 'aria-live': 'polite' });
-    const save = h('button', { type: 'button', class: 'primary' }, 'Save details');
+    // Autosave: a change is saved about a second after the last keystroke or
+    // pick. Saves run one at a time; what changed meanwhile is saved next.
     const read = (): FlightDetails => ({
       rocketMaker: maker.input.value, rocketName: name.value, recovery: recovery.input.value,
       electronics: joinElectronics(elecRows.map((r) => r.input.value)), notes: log.value, motors: rows.map((r) => r.read()),
     });
-    const doSave = async () => {
-      save.disabled = true; status.textContent = 'Saving…';
-      try { await saveDetails(ownerUid, locatorId, recordKey, read()); status.textContent = 'Saved.'; }
-      catch (err) { status.textContent = `Could not save: ${(err as Error).message}`; }
-      finally { save.disabled = false; }
+    let savedJson = JSON.stringify(cleanDetails(read()));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let saving: Promise<void> | null = null;
+    const dirty = () => JSON.stringify(cleanDetails(read())) !== savedJson;
+    const doSave = async (): Promise<void> => {
+      if (timer) { clearTimeout(timer); timer = undefined; }
+      if (saving) { await saving; return doSave(); }
+      if (!dirty()) return;
+      const d = read();
+      const json = JSON.stringify(cleanDetails(d));
+      status.textContent = 'Saving…';
+      saving = saveDetails(ownerUid, locatorId, recordKey, d)
+        .then(() => { savedJson = json; status.textContent = dirty() ? 'Saving…' : 'All changes saved'; })
+        .catch((err) => { status.textContent = `Not saved: ${(err as Error).message}`; })
+        .finally(() => { saving = null; });
+      await saving;
+      if (dirty()) schedule();
     };
-    save.addEventListener('click', doSave);
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      if (dirty()) status.textContent = 'Unsaved changes…';
+      timer = setTimeout(() => { void doSave(); }, 1000);
+    };
+    body.addEventListener('input', schedule);
+    body.addEventListener('change', schedule);
+    body.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('button')) schedule(); });
+    // Leaving with a change not yet saved: save now and let the browser ask.
+    const warn = (e: BeforeUnloadEvent) => {
+      if (!dirty()) return;
+      void doSave();
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    // This page is left by a hash change: save what is pending, then stop guarding it.
+    window.addEventListener('hashchange', () => {
+      void doSave().finally(() => window.removeEventListener('beforeunload', warn));
+    }, { once: true });
     addNote.addEventListener('click', async () => {
       if (!entry.value.trim()) return;
       log.value = appendLog(log.value, entry.value, new Date());
@@ -275,7 +307,6 @@ export function detailsSection(ownerUid: string, locatorId: string, recordKey: s
       h('h3', {}, 'Notes'),
       h('label', { class: 'field wide' }, 'Add a note', entry), h('div', { class: 'actions' }, addNote),
       logWrap,
-      h('div', { class: 'actions' }, save, status),
     );
   }).catch((err) => {
     body.replaceChildren(h('p', { class: 'error' }, `Could not load the details: ${(err as Error).message}`));

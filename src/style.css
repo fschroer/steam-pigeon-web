@@ -185,3 +185,4 @@ pre.notes-log { background: var(--surface-1); border: 1px solid var(--border); b
 .combo-option[aria-selected="true"] { font-weight: 600; }
 .field-label { font-size: 0.85rem; }
 .elec-row { display: grid; grid-template-columns: minmax(0, 24rem) auto; gap: 0.5rem; align-items: end; padding: 0.2rem 0; }
+.save-status { font-weight: normal; margin-left: 0.5rem; }
