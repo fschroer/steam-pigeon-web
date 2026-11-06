@@ -3,7 +3,7 @@ import type { User } from 'firebase/auth';
 import { configured } from './firebase';
 import { watchUser, signInGoogle, signInEmail, resetPassword, signOut, authMessage, sendVerification, refreshUser } from './auth';
 import { addShare, removeShare, sharesOfRecord, sharedWithMe, normalizeEmail, sharedCsvPath, shareMailto, type Share } from './shares';
-import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, saveLocalCsv, readMeta, savePlace, type RecordInfo } from './store';
+import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, saveLocalCsv, readMeta, savePlace, saveSamples, type RecordInfo } from './store';
 import { lookupPlace, PLACE_ATTRIBUTION } from './place';
 import type { PathPoint } from './kml';
 import { formatRecordTime, recordId, csvFileName, locatorLabel } from './records';
@@ -157,7 +157,9 @@ async function listView() {
       const place = h('td', {}, r.place ?? '');
       const flight = flightCell(`#/flight/${locatorId}/${recordId(r)}`, r.recordTs, () => r.originalName);
       noteName(r);
-      const needPlace = () => { if (!r.place && r.csvPath) queuePlaceLookup(r, place); };
+      const needPlace = () => {
+        if (r.csvPath && (!r.place || r.samples === undefined)) queueBackfill(r, place, samples);
+      };
       if (!('sizeBytes' in r)) {
         loadInfo(r).then((info) => {
           Object.assign(r, info);
@@ -342,37 +344,50 @@ async function sharedFlightView(ownerUid: string, locatorId: string, recordKey: 
     { known: async () => (await meta).place, show: placeShower(heading, sub) });
 }
 
-// Places for flights never opened: the list fills them in by itself, one flight
-// at a time and at most one lookup a second (Nominatim's limit), by loading the
-// CSV for its pad fix. A name found is kept, so each flight is looked up once.
-const placeQueue: { rec: RecordInfo; cell: HTMLElement }[] = [];
-let placeWorker: Promise<void> | null = null;
-const placeTried = new Set<string>();
+// What the list fills in by itself, for flights never opened: the place, and
+// the sample count of a CSV saved from the computer (the app's uploads carry
+// it). One flight at a time, at most one place lookup a second (Nominatim's
+// limit), loading each CSV once. What is found is kept on the CSV, so each
+// flight is done once.
+const backfillQueue: { rec: RecordInfo; placeCell: HTMLElement; samplesCell: HTMLElement }[] = [];
+let backfillWorker: Promise<void> | null = null;
+const backfillTried = new Set<string>();
 
-function queuePlaceLookup(rec: RecordInfo, cell: HTMLElement) {
+function queueBackfill(rec: RecordInfo, placeCell: HTMLElement, samplesCell: HTMLElement) {
   const key = rec.csvPath!;
-  if (placeTried.has(key)) return;
-  placeTried.add(key);
-  cell.textContent = '…';
-  placeQueue.push({ rec, cell });
-  placeWorker ??= (async () => {
-    while (placeQueue.length) {
-      const { rec: r, cell: c } = placeQueue.shift()!;
+  if (backfillTried.has(key)) return;
+  backfillTried.add(key);
+  if (!rec.place) placeCell.textContent = '…';
+  if (rec.samples === undefined) samplesCell.textContent = '…';
+  backfillQueue.push({ rec, placeCell, samplesCell });
+  backfillWorker ??= (async () => {
+    while (backfillQueue.length) {
+      const { rec: r, placeCell: pc, samplesCell: sc } = backfillQueue.shift()!;
       const started = Date.now();
+      let looked = false;
       try {
         let t = tableCache.get(r.csvPath!);
-        t ??= parseFlightCsv(await fetchCsvText(r.csvPath!));   // not cached: only the pad fix is needed
-        const pad = flightPath(t)[0];
-        const p = pad ? await lookupPlace(pad.lat, pad.lon) : undefined;
-        if (p) { r.place = p; await savePlace(r.csvPath!, p).catch(() => { /* shown; looked up again later */ }); }
-        c.textContent = p ?? '';
+        t ??= parseFlightCsv(await fetchCsvText(r.csvPath!));   // not cached: only a little is needed
+        if (r.samples === undefined) {
+          r.samples = t.rows;
+          sc.textContent = t.rows.toLocaleString();
+          await saveSamples(r.csvPath!, t.rows).catch(() => { /* shown; counted again later */ });
+        }
+        if (!r.place) {
+          const pad = flightPath(t)[0];
+          looked = Boolean(pad);
+          const p = pad ? await lookupPlace(pad.lat, pad.lon) : undefined;
+          if (p) { r.place = p; await savePlace(r.csvPath!, p).catch(() => { /* shown; looked up again later */ }); }
+          pc.textContent = p ?? '';
+        }
       } catch {
-        c.textContent = '';
+        if (!r.place) pc.textContent = '';
+        if (r.samples === undefined) sc.textContent = '–';
       }
       const wait = 1100 - (Date.now() - started);
-      if (wait > 0 && placeQueue.length) await new Promise((res) => setTimeout(res, wait));
+      if (looked && wait > 0 && backfillQueue.length) await new Promise((res) => setTimeout(res, wait));
     }
-    placeWorker = null;
+    backfillWorker = null;
   })();
 }
 
@@ -479,6 +494,11 @@ async function flightView(locatorId: string, id: string) {
     csvFileName(rec).replace(/\.csv$/, '.kml'), 'Could not load the CSV', {
       known: async () => (await loadInfo(rec).catch(() => rec as RecordInfo)).place,
       save: async (p) => { await savePlace(csvPath, p); rec.place = p; },
+      onTable: (t) => {
+        if (rec.samples !== undefined) return;
+        rec.samples = t.rows;
+        saveSamples(csvPath, t.rows).catch(() => { /* counted again next time */ });
+      },
       show: placeShower(heading, sub),
     });
 }
@@ -488,6 +508,8 @@ interface PlaceHooks {
   known?: () => Promise<string | undefined>;
   /** Keeps a looked-up name (the owner only). */
   save?: (place: string) => Promise<void>;
+  /** Called with the loaded table, e.g. to keep its row count (the owner only). */
+  onTable?: (t: FlightTable) => void;
   show: (place: string) => void;
 }
 
@@ -558,7 +580,7 @@ async function renderFlightData(body: HTMLElement, csvPath: string, kmlButton: H
   loading.remove();
   const t = table;
   const path = flightPath(t);
-  if (place) void resolvePlace(path, place);
+  if (place) { place.onTable?.(t); void resolvePlace(path, place); }
   wireKml(kmlButton, t, path, kmlName, kmlFile);
   body.append(view3d(t, path));
   renderCharts(body, t);
@@ -684,7 +706,7 @@ function localView() {
   save.addEventListener('click', async () => {
     save.disabled = true; save.textContent = 'Saving…';
     try {
-      const { locatorId, recordKey } = await saveLocalCsv(user!.uid, text, name, lastModified);
+      const { locatorId, recordKey } = await saveLocalCsv(user!.uid, text, name, lastModified, t.rows);
       flights = null;
       location.hash = `#/flight/${locatorId}/${recordKey}`;
     } catch (err) {

@@ -83,7 +83,7 @@ export async function deleteRecord(r: RecordRef): Promise<void> {
  * "Flight time" line, else the file's date. Saving the same file again finds
  * the copy already there.
  */
-export async function saveLocalCsv(uid: string, text: string, fileName: string, lastModifiedMs: number):
+export async function saveLocalCsv(uid: string, text: string, fileName: string, lastModifiedMs: number, samples?: number):
   Promise<{ locatorId: string; recordKey: string }> {
   const recordTs = flightTimeFromCsv(text) ?? Math.floor(lastModifiedMs / 1000);
   const recordKey = recordId({ recordTs, crc: crc32Hex(text) });
@@ -94,7 +94,10 @@ export async function saveLocalCsv(uid: string, text: string, fileName: string, 
     if ((e as { code?: string })?.code !== 'storage/object-not-found') throw e;
     await uploadString(r, text, 'raw', {
       contentType: 'text/csv',
-      customMetadata: { source: 'computer', original_name: fileName.slice(0, 200) },
+      customMetadata: {
+        source: 'computer', original_name: fileName.slice(0, 200),
+        ...(samples !== undefined ? { samples: String(samples) } : {}),
+      },
     });
   }
   return { locatorId: COMPUTER_LOCATOR_ID, recordKey };
@@ -119,4 +122,12 @@ export async function readMeta(path: string): Promise<{ place?: string; original
 /** Keeps the launch site's name on the owner's CSV; other custom metadata is left as it is. */
 export async function savePlace(path: string, place: string): Promise<void> {
   await updateMetadata(ref(storage(), path), { customMetadata: { place } });
+}
+
+/**
+ * Keeps the row count as `samples`, as the app's uploads carry it, on a CSV
+ * that lacks it (one saved from the computer).
+ */
+export async function saveSamples(path: string, samples: number): Promise<void> {
+  await updateMetadata(ref(storage(), path), { customMetadata: { samples: String(samples) } });
 }
