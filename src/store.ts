@@ -1,6 +1,6 @@
-import { getStorage, ref, listAll, getMetadata, getBlob, getDownloadURL, deleteObject } from 'firebase/storage';
+import { getStorage, ref, listAll, getMetadata, getBlob, getDownloadURL, deleteObject, uploadString } from 'firebase/storage';
 import { app } from './firebase';
-import { groupRecords, recordsPrefix, type RecordRef } from './records';
+import { groupRecords, recordsPrefix, recordId, crc32Hex, flightTimeFromCsv, COMPUTER_LOCATOR_ID, type RecordRef } from './records';
 
 export interface RecordInfo extends RecordRef {
   samples?: number;
@@ -70,4 +70,28 @@ export async function deleteRecord(r: RecordRef): Promise<void> {
       if ((e as { code?: string })?.code !== 'storage/object-not-found') throw e;
     }
   }
+}
+
+/**
+ * Saves a CSV opened from the viewer's computer into their own store, so it can
+ * be shared like an uploaded flight. It goes under locator 0 ("Saved from your
+ * computer"), named {flight time}_{CRC-32 of the file}. The time is the export's
+ * "Flight time" line, else the file's date. Saving the same file again finds
+ * the copy already there.
+ */
+export async function saveLocalCsv(uid: string, text: string, fileName: string, lastModifiedMs: number):
+  Promise<{ locatorId: string; recordKey: string }> {
+  const recordTs = flightTimeFromCsv(text) ?? Math.floor(lastModifiedMs / 1000);
+  const recordKey = recordId({ recordTs, crc: crc32Hex(text) });
+  const r = ref(storage(), `${recordsPrefix(uid)}/${COMPUTER_LOCATOR_ID}/${recordKey}.csv`);
+  try {
+    await getMetadata(r);
+  } catch (e) {
+    if ((e as { code?: string })?.code !== 'storage/object-not-found') throw e;
+    await uploadString(r, text, 'raw', {
+      contentType: 'text/csv',
+      customMetadata: { source: 'computer', original_name: fileName.slice(0, 200) },
+    });
+  }
+  return { locatorId: COMPUTER_LOCATOR_ID, recordKey };
 }

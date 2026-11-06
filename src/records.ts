@@ -62,8 +62,38 @@ export function csvFileName(r: Pick<RecordRef, 'locatorId' | 'recordTs' | 'crc'>
   return `steam-pigeon_${r.locatorId}_${r.recordTs}_${r.crc}.csv`;
 }
 
+/**
+ * The folder for CSVs saved from the viewer's own computer. A file carries no
+ * locator id, and no real locator has id 0. The app lists only the folders of
+ * locators it knows, so it never sees this one.
+ */
+export const COMPUTER_LOCATOR_ID = '0';
+
 /** How a locator is titled: its own name when an upload carried one, else its id. */
 export function locatorLabel(locatorId: string, name?: string): string {
+  if (locatorId === COMPUTER_LOCATOR_ID) return 'Saved from your computer';
   const n = name?.trim();
   return n ? `${n} (${locatorId})` : `Locator ${locatorId}`;
+}
+
+/**
+ * The flight's time from a USB export's "Flight time: 2026-09-26 16:07:35" line
+ * (UTC, from the locator's GPS clock), as Unix seconds, or undefined.
+ */
+export function flightTimeFromCsv(text: string): number | undefined {
+  const m = /^Flight time:\s*(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d)/m.exec(text.slice(0, 4000));
+  if (!m) return undefined;
+  const [y, mo, d, hh, mi, ss] = m.slice(1).map(Number);
+  const t = Date.UTC(y, mo - 1, d, hh, mi, ss) / 1000;
+  return Number.isFinite(t) && t > 1_000_000_000 ? t : undefined;
+}
+
+/** CRC-32 (IEEE) of the text's UTF-8 bytes, as 8 lowercase hex digits. */
+export function crc32Hex(text: string): string {
+  let c = ~0;
+  for (const b of new TextEncoder().encode(text)) {
+    c ^= b;
+    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+  }
+  return ((~c) >>> 0).toString(16).padStart(8, '0');
 }

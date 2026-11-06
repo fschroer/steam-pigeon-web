@@ -3,7 +3,7 @@ import type { User } from 'firebase/auth';
 import { configured } from './firebase';
 import { watchUser, signInGoogle, signInEmail, resetPassword, signOut, authMessage, sendVerification, refreshUser } from './auth';
 import { addShare, removeShare, sharesOfRecord, sharedWithMe, normalizeEmail, sharedCsvPath, shareMailto, type Share } from './shares';
-import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, type RecordInfo } from './store';
+import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, saveLocalCsv, type RecordInfo } from './store';
 import { formatRecordTime, recordId, csvFileName, locatorLabel } from './records';
 import { parseFlightCsv, column, stateChanges, type FlightTable } from './csv';
 import { flightPath, buildKml } from './kml';
@@ -511,7 +511,7 @@ function wireKml(button: HTMLButtonElement, t: FlightTable, path: ReturnType<typ
 // downloaded earlier), read in the browser. Nothing is uploaded; the file is gone
 // when the page reloads.
 
-let localFile: { name: string; table: FlightTable } | null = null;
+let localFile: { name: string; table: FlightTable; text: string; lastModified: number } | null = null;
 
 function openLocalSection(): HTMLElement {
   const status = h('p', { class: 'muted small', 'aria-live': 'polite' });
@@ -521,9 +521,10 @@ function openLocalSection(): HTMLElement {
     if (!f) return;
     status.textContent = `Reading ${f.name}…`;
     try {
-      const table = parseFlightCsv(await f.text());
+      const text = await f.text();
+      const table = parseFlightCsv(text);
       if (!table.columns.includes('time_ms')) throw new Error('it has no time_ms column, so it is not a Steam Pigeon flight export');
-      localFile = { name: f.name, table };
+      localFile = { name: f.name, table, text, lastModified: f.lastModified };
       location.hash = '#/local';
     } catch (err) {
       status.textContent = `Could not open ${f.name}: ${(err as Error).message}`;
@@ -541,13 +542,27 @@ function openLocalSection(): HTMLElement {
 function localView() {
   header();
   if (!localFile) { location.hash = '#/'; return; }
-  const { name, table: t } = localFile;
+  const { name, table: t, text, lastModified } = localFile;
   const back = h('a', { href: '#/' }, '← All flights');
   const kmlButton = h('button', { type: 'button', disabled: true }, 'Google Earth (.kml)');
+  // Sharing needs the file in the store, where the rules can guard it.
+  const save = h('button', { type: 'button', class: 'primary' }, 'Save to my flights');
+  save.title = 'Copies this CSV into your web store, under “Saved from your computer”, so you can share it.';
+  save.addEventListener('click', async () => {
+    save.disabled = true; save.textContent = 'Saving…';
+    try {
+      const { locatorId, recordKey } = await saveLocalCsv(user!.uid, text, name, lastModified);
+      flights = null;
+      location.hash = `#/flight/${locatorId}/${recordKey}`;
+    } catch (err) {
+      alert(`Could not save: ${(err as Error).message}`);
+      save.disabled = false; save.textContent = 'Save to my flights';
+    }
+  });
   const body = h('div', {},
     h('h1', {}, name),
-    h('p', { class: 'muted' }, 'From your computer, not the web store. Reloading the page closes it.'),
-    h('div', { class: 'actions' }, kmlButton),
+    h('p', { class: 'muted' }, 'From your computer, not the web store. Reloading the page closes it. Save it to your flights to share it.'),
+    h('div', { class: 'actions' }, save, kmlButton),
   );
   show(back, body);
   const path = flightPath(t);

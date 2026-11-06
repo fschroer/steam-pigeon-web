@@ -42,3 +42,20 @@ describe('groupRecords', () => {
     expect(csvFileName({ locatorId: '1136992075', recordTs: 100, crc: '0000abcd' })).toBe('steam-pigeon_1136992075_100_0000abcd.csv');
   });
 });
+
+import { crc32Hex, flightTimeFromCsv, locatorLabel as label2 } from '../src/records';
+
+describe('saving a CSV from the computer', () => {
+  it('computes the standard CRC-32', () => {
+    expect(crc32Hex('123456789')).toBe('cbf43926');
+    expect(crc32Hex('')).toBe('00000000');
+  });
+  it('reads the USB export flight time as UTC', () => {
+    expect(flightTimeFromCsv('Flight time: 2026-09-26 16:07:35\nLaunch detect time: 2000\ntime_ms,x\n'))
+      .toBe(Date.UTC(2026, 8, 26, 16, 7, 35) / 1000);
+    expect(flightTimeFromCsv('time_ms,x\n0,1\n')).toBeUndefined();
+  });
+  it('titles the computer folder', () => {
+    expect(label2('0')).toBe('Saved from your computer');
+  });
+});
