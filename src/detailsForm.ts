@@ -54,7 +54,7 @@ export function combo(value: string, placeholder: string, label: string, options
   let typed = false;
 
   const input = h('input', {
-    type: 'text', value, placeholder, 'aria-label': label, autocomplete: 'off',
+    type: 'text', value, placeholder, 'aria-label': label, autocomplete: 'off', spellcheck: 'false',
     role: 'combobox', 'aria-expanded': 'false', 'aria-controls': id, 'aria-autocomplete': 'list',
   });
   const arrow = h('button', { type: 'button', class: 'combo-arrow', tabindex: '-1', 'aria-label': `Show all ${label} choices` }, '▾');
@@ -204,7 +204,7 @@ export function detailsSection(ownerUid: string, locatorId: string, recordKey: s
     if (!editable) { body.replaceChildren(detailsReadOnly(d)); return; }
 
     const maker = combo(d.rocketMaker, 'Estes, LOC Precision…', 'Rocket manufacturer', ROCKET_MAKERS);
-    const name = h('input', { type: 'text', value: d.rocketName, placeholder: 'Red Ryder Revisited', 'aria-label': 'Rocket name' });
+    const name = h('input', { type: 'text', spellcheck: 'false', value: d.rocketName, placeholder: 'Red Ryder Revisited', 'aria-label': 'Rocket name' });
     const recovery = combo(d.recovery, 'Parachute', 'Recovery', [...RECOVERY_TYPES]);
     // Electronics: one dropdown per device, as many as were flown.
     const elecList = h('div', { class: 'elec-list' });
@@ -235,9 +235,9 @@ export function detailsSection(ownerUid: string, locatorId: string, recordKey: s
     more.addEventListener('click', () => addMotor(emptyMotor()));
 
     // Notes: an entry is stamped and added to the log; the log is edited directly after that.
-    const entry = h('textarea', { rows: '2', placeholder: 'What happened, what to change next time…', 'aria-label': 'Add a note' });
+    const entry = h('textarea', { rows: '2', spellcheck: 'true', placeholder: 'What happened, what to change next time…', 'aria-label': 'Add a note' });
     const addNote = h('button', { type: 'button' }, 'Add to log');
-    const log = h('textarea', { rows: '6', class: 'notes-log', 'aria-label': 'Notes log' });
+    const log = h('textarea', { rows: '6', class: 'notes-log', spellcheck: 'true', 'aria-label': 'Notes log' });
     log.value = d.notes;
     const logWrap = h('label', { class: 'field wide' }, 'Log', log);
     logWrap.hidden = !d.notes;
