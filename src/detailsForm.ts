@@ -5,7 +5,8 @@
 import { h } from './dom';
 import {
   loadDetails, saveDetails, appendLog, emptyMotor, motorSummary, parseDelays,
-  EX_MOTOR, RECOVERY_TYPES, ROCKET_MAKERS, type FlightDetails, type MotorEntry,
+  EX_MOTOR, RECOVERY_TYPES, ROCKET_MAKERS, ELECTRONICS, splitElectronics, joinElectronics,
+  type FlightDetails, type MotorEntry,
 } from './details';
 import { manufacturers, motors, IMPULSE_CLASSES, type TcMotor } from './thrustcurve';
 
@@ -186,7 +187,7 @@ function detailsReadOnly(d: FlightDetails): HTMLElement {
     ...row('Rocket', [d.rocketMaker, d.rocketName].filter(Boolean).join(' · ')),
     ...row('Motors', d.motors.map(motorSummary).join(', ')),
     ...row('Recovery', d.recovery),
-    ...row('Electronics', d.electronics),
+    ...row('Electronics', splitElectronics(d.electronics).join(', ')),
   ];
   return h('div', {},
     items.length ? h('dl', { class: 'details-list' }, ...items) : h('p', { class: 'muted' }, 'No details were added.'),
@@ -204,7 +205,22 @@ export function detailsSection(ownerUid: string, locatorId: string, recordKey: s
     const maker = combo(d.rocketMaker, 'Estes, LOC Precision…', 'Rocket manufacturer', ROCKET_MAKERS);
     const name = h('input', { type: 'text', value: d.rocketName, placeholder: 'Red Ryder Revisited', 'aria-label': 'Rocket name' });
     const recovery = combo(d.recovery, 'Parachute', 'Recovery', [...RECOVERY_TYPES]);
-    const electronics = h('input', { type: 'text', value: d.electronics, placeholder: 'Steam Pigeon locator, Eggtimer Quasar…', 'aria-label': 'Electronics' });
+    // Electronics: one dropdown per device, as many as were flown.
+    const elecList = h('div', { class: 'elec-list' });
+    const elecRows: { input: HTMLInputElement; el: HTMLElement }[] = [];
+    const addElec = (v: string) => {
+      const c = combo(v, 'Featherweight Raven…', 'Electronics', ELECTRONICS);
+      const remove = h('button', { type: 'button', class: 'link' }, 'Remove');
+      const el = h('div', { class: 'elec-row' }, c.wrap, remove);
+      const row = { input: c.input, el };
+      remove.addEventListener('click', () => { elecRows.splice(elecRows.indexOf(row), 1); el.remove(); });
+      elecRows.push(row);
+      elecList.append(el);
+    };
+    const elec0 = splitElectronics(d.electronics);
+    (elec0.length ? elec0 : ['']).forEach(addElec);
+    const moreElec = h('button', { type: 'button' }, 'Add another device');
+    moreElec.addEventListener('click', () => addElec(''));
 
     const motorList = h('div', { class: 'motors' });
     const rows: ReturnType<typeof motorRow>[] = [];
@@ -229,7 +245,7 @@ export function detailsSection(ownerUid: string, locatorId: string, recordKey: s
     const save = h('button', { type: 'button', class: 'primary' }, 'Save details');
     const read = (): FlightDetails => ({
       rocketMaker: maker.input.value, rocketName: name.value, recovery: recovery.input.value,
-      electronics: electronics.value, notes: log.value, motors: rows.map((r) => r.read()),
+      electronics: joinElectronics(elecRows.map((r) => r.input.value)), notes: log.value, motors: rows.map((r) => r.read()),
     });
     const doSave = async () => {
       save.disabled = true; status.textContent = 'Saving…';
@@ -250,8 +266,9 @@ export function detailsSection(ownerUid: string, locatorId: string, recordKey: s
       h('div', { class: 'details-grid' },
         maker.wrap,
         h('label', { class: 'field' }, 'Rocket name', name),
-        recovery.wrap,
-        h('label', { class: 'field' }, 'Electronics', electronics)),
+        recovery.wrap),
+      h('h3', {}, 'Electronics'),
+      elecList, h('div', { class: 'actions' }, moreElec),
       h('h3', {}, 'Motors'),
       h('p', { class: 'muted small' }, 'Pick a manufacturer, then the impulse class, then the motor; the delay list follows the motor. Any field also takes typed text, and EX (experimental) is in the manufacturer list.'),
       motorList, h('div', { class: 'actions' }, more),

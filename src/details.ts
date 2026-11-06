@@ -24,6 +24,7 @@ export interface FlightDetails {
   rocketName: string;
   motors: MotorEntry[];
   recovery: string;
+  /** The devices flown, joined by "; " (splitElectronics / joinElectronics). */
   electronics: string;
   /** The notes log: timestamped lines, also edited directly. */
   notes: string;
@@ -40,6 +41,28 @@ export const ROCKET_MAKERS = [
   'Polecat Aerospace', 'Public Missiles (PML)', 'Quest Aerospace', 'Rocketarium', 'Semroc',
   'Sunward Aerospace', 'Wildman Rocketry', 'Scratch built',
 ];
+
+/**
+ * Common altimeters, flight computers and trackers, offered in the Electronics
+ * list. No public database of these exists (unlike ThrustCurve for motors), so
+ * this list is kept here; anything else can be typed.
+ */
+export const ELECTRONICS = [
+  'Altus Metrum EasyMega', 'Altus Metrum EasyMini', 'Altus Metrum TeleMega', 'Altus Metrum TeleMetrum',
+  'Big Red Bee GPS', 'Eggtimer Apogee', 'Eggtimer Eggfinder', 'Eggtimer Proton', 'Eggtimer Quantum', 'Eggtimer Quasar',
+  'Entacore AIM', 'Featherweight Blue Raven', 'Featherweight GPS Tracker', 'Featherweight Raven',
+  'Jolly Logic AltimeterThree', 'Jolly Logic Chute Release', 'Missile Works RRC2+', 'Missile Works RRC3',
+  'PerfectFlite Firefly', 'PerfectFlite Pnut', 'PerfectFlite StratoLoggerCF', 'Steam Pigeon locator',
+];
+
+/** The electronics field as separate devices. */
+export function splitElectronics(s: string): string[] {
+  return s.split(';').map((x) => x.trim()).filter(Boolean);
+}
+
+export function joinElectronics(items: string[]): string {
+  return items.map((x) => x.trim().replace(/;/g, ',')).filter(Boolean).join('; ');
+}
 
 export function emptyDetails(): FlightDetails {
   return { rocketMaker: '', rocketName: '', motors: [], recovery: '', electronics: '', notes: '' };

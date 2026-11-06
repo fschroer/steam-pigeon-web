@@ -61,3 +61,16 @@ describe('dropdown list', () => {
     expect(filterOptions('', opts, false)).toHaveLength(3);
   });
 });
+
+import { splitElectronics, joinElectronics } from '../src/details';
+
+describe('electronics list', () => {
+  it('round-trips devices', () => {
+    const s = joinElectronics(['Featherweight Raven', ' ', 'Eggtimer Quasar']);
+    expect(s).toBe('Featherweight Raven; Eggtimer Quasar');
+    expect(splitElectronics(s)).toEqual(['Featherweight Raven', 'Eggtimer Quasar']);
+  });
+  it('keeps old free text as one device', () => {
+    expect(splitElectronics('RRC3, Raven')).toEqual(['RRC3, Raven']);
+  });
+});
