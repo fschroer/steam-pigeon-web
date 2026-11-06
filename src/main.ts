@@ -156,14 +156,16 @@ async function listView() {
       const samples = h('td', { class: 'num' }, r.samples !== undefined ? r.samples.toLocaleString() : '…');
       const place = h('td', {}, r.place ?? '');
       noteName(r);
+      const needPlace = () => { if (!r.place && r.csvPath) queuePlaceLookup(r, place); };
       if (!('sizeBytes' in r)) {
         loadInfo(r).then((info) => {
           Object.assign(r, info);
           samples.textContent = info.samples !== undefined ? info.samples.toLocaleString() : '–';
           place.textContent = info.place ?? '';
           noteName(r);
+          needPlace();
         }).catch(() => { samples.textContent = '–'; });
-      }
+      } else needPlace();
       const files = [r.csvPath && 'CSV', r.binPath && 'raw'].filter(Boolean).join(' + ');
       return h('tr', {},
         h('td', {}, h('a', { href: `#/flight/${locatorId}/${recordId(r)}` }, formatRecordTime(r.recordTs))),
@@ -328,6 +330,40 @@ async function sharedFlightView(ownerUid: string, locatorId: string, recordKey: 
   await renderFlightData(body, csvPath, kmlButton, `${name}, ${formatRecordTime(Number(ts))}`, `${fileBase}.kml`,
     'Could not open this flight. The owner may have stopped sharing it or deleted it',
     { known: () => readPlace(csvPath), show: placeShower(title, sub, formatRecordTime(Number(ts))) });
+}
+
+// Places for flights never opened: the list fills them in by itself, one flight
+// at a time and at most one lookup a second (Nominatim's limit), by loading the
+// CSV for its pad fix. A name found is kept, so each flight is looked up once.
+const placeQueue: { rec: RecordInfo; cell: HTMLElement }[] = [];
+let placeWorker: Promise<void> | null = null;
+const placeTried = new Set<string>();
+
+function queuePlaceLookup(rec: RecordInfo, cell: HTMLElement) {
+  const key = rec.csvPath!;
+  if (placeTried.has(key)) return;
+  placeTried.add(key);
+  cell.textContent = '…';
+  placeQueue.push({ rec, cell });
+  placeWorker ??= (async () => {
+    while (placeQueue.length) {
+      const { rec: r, cell: c } = placeQueue.shift()!;
+      const started = Date.now();
+      try {
+        let t = tableCache.get(r.csvPath!);
+        t ??= parseFlightCsv(await fetchCsvText(r.csvPath!));   // not cached: only the pad fix is needed
+        const pad = flightPath(t)[0];
+        const p = pad ? await lookupPlace(pad.lat, pad.lon) : undefined;
+        if (p) { r.place = p; await savePlace(r.csvPath!, p).catch(() => { /* shown; looked up again later */ }); }
+        c.textContent = p ?? '';
+      } catch {
+        c.textContent = '';
+      }
+      const wait = 1100 - (Date.now() - started);
+      if (wait > 0 && placeQueue.length) await new Promise((res) => setTimeout(res, wait));
+    }
+    placeWorker = null;
+  })();
 }
 
 async function download(path: string, name: string, btn: HTMLButtonElement) {
