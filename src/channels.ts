@@ -56,3 +56,24 @@ export const FLIGHT_STATES: Record<number, string> = {
 export function flightStateName(s: number): string {
   return FLIGHT_STATES[s] ?? `State ${s}`;
 }
+
+/**
+ * The short tag drawn on each event line, on every chart. One fixed tag per
+ * state, so the same line reads the same everywhere; the hover tooltip and the
+ * Flight events table give the full name.
+ */
+export const FLIGHT_STATE_ABBR: Record<number, string> = {
+  0: 'Pad',
+  1: 'LNCH',
+  2: 'BO',
+  3: 'NO',
+  4: 'DRG',
+  5: 'DRG2',
+  6: 'MAIN',
+  7: 'MAIN2',
+  8: 'LND',
+};
+
+export function flightStateAbbr(s: number): string {
+  return FLIGHT_STATE_ABBR[s] ?? `S${s}`;
+}
