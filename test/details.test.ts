@@ -48,3 +48,16 @@ describe('Tab completion', () => {
     expect(firstMatch('  ', opts)).toBeUndefined();
   });
 });
+
+import { filterOptions } from '../src/detailsForm';
+
+describe('dropdown list', () => {
+  const opts = [{ value: 'Estes' }, { value: 'LOC Precision' }, { value: 'Madcow Rocketry' }];
+  it('shows everything on entering the field, whatever is typed there', () => {
+    expect(filterOptions('Estes', opts, true)).toHaveLength(3);
+  });
+  it('narrows once the user types', () => {
+    expect(filterOptions('ma', opts, false).map((o) => o.value)).toEqual(['Madcow Rocketry']);
+    expect(filterOptions('', opts, false)).toHaveLength(3);
+  });
+});

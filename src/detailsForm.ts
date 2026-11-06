@@ -1,6 +1,6 @@
 // The "Flight details" section of a flight page (ADR-0042 amendment, 2026-11-06).
-// Every choice list is a suggestion list on a text field, so anything can be
-// typed instead: a kit maker not listed, an EX motor, a delay drilled to 9 s.
+// Every choice list is a dropdown on a text field, so anything can be typed
+// instead: a kit maker not listed, an EX motor, a delay drilled to 9 s.
 
 import { h } from './dom';
 import {
@@ -22,24 +22,110 @@ export function firstMatch(typed: string, options: { value: string; label?: stri
   return options.find((o) => o.value.toLowerCase().includes(t) || (o.label ?? '').toLowerCase().includes(t))?.value;
 }
 
-/** A text field with a suggestion list. Returns the field and a way to change the suggestions. */
-function combo(value: string, placeholder: string, label: string, options: string[] = []) {
-  const id = `dl${++listSeq}`;
-  const list = h('datalist', { id });
-  const input = h('input', { type: 'text', list: id, value, placeholder, 'aria-label': label, autocomplete: 'off' });
-  const setOptions = (opts: { value: string; label?: string }[]) =>
-    list.replaceChildren(...opts.map((o) => h('option', { value: o.value }, o.label ?? '')));
-  setOptions(options.map((v) => ({ value: v })));
-  // Tab after a few letters takes the first suggestion that matches, the way the
-  // browser's own list filters (value or label containing the text, in list order).
-  input.addEventListener('keydown', (e) => {
-    if (e.key !== 'Tab' || e.shiftKey) return;
-    const pick = firstMatch(input.value, [...list.options].map((o) => ({ value: o.value, label: o.label })));
-    if (pick === undefined || pick === input.value) return;
-    input.value = pick;
-    input.dispatchEvent(new Event('change', { bubbles: true }));
+export interface ComboOption { value: string; label?: string }
+
+/** The options the list shows: all of them, or those whose value or label contains [typed]. */
+export function filterOptions(typed: string, options: ComboOption[], showAll: boolean): ComboOption[] {
+  const t = typed.trim().toLowerCase();
+  if (showAll || !t) return options;
+  return options.filter((o) => o.value.toLowerCase().includes(t) || (o.label ?? '').toLowerCase().includes(t));
+}
+
+/**
+ * A text field with a dropdown list (the ARIA "editable combobox" pattern),
+ * used instead of the browser's datalist because a datalist only ever offers
+ * what matches the text already in the field. Here:
+ * - entering the field, or clicking its arrow, opens the whole list, with the
+ *   current value marked, and selects the text so typing replaces it;
+ * - typing narrows the list (value or label containing the text);
+ * - Up/Down move, Enter picks, Escape closes; a click picks;
+ * - Tab after typing takes the first match (an exact match, or no match, is
+ *   left as typed);
+ * - anything can still be typed, so a value not in the list is kept.
+ * Picking fires "change" on the field, as typing does on leaving it.
+ */
+export function combo(value: string, placeholder: string, label: string, options: string[] = []) {
+  const id = `cb${++listSeq}`;
+  let opts: ComboOption[] = options.map((v) => ({ value: v }));
+  let shown: ComboOption[] = [];
+  let active = -1;
+  let showAll = true;
+  let typed = false;
+
+  const input = h('input', {
+    type: 'text', value, placeholder, 'aria-label': label, autocomplete: 'off',
+    role: 'combobox', 'aria-expanded': 'false', 'aria-controls': id, 'aria-autocomplete': 'list',
   });
-  return { input, list, setOptions, wrap: h('label', { class: 'field' }, label, input, list) };
+  const arrow = h('button', { type: 'button', class: 'combo-arrow', tabindex: '-1', 'aria-label': `Show all ${label} choices` }, '▾');
+  const list = h('ul', { id, role: 'listbox', class: 'combo-list', 'aria-label': label });
+  list.hidden = true;
+
+  const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); active = -1; };
+  const pick = (v: string) => {
+    input.value = v;
+    close();
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const render = () => {
+    shown = filterOptions(input.value, opts, showAll);
+    if (!shown.length) { close(); return; }
+    const cur = input.value.trim().toLowerCase();
+    list.replaceChildren(...shown.map((o, i) => {
+      const li = h('li', { id: `${id}-${i}`, role: 'option', class: 'combo-option',
+        'aria-selected': o.value.toLowerCase() === cur ? 'true' : 'false' },
+        h('span', {}, o.value), o.label && o.label !== o.value ? h('span', { class: 'muted small' }, o.label) : null);
+      if (i === active) li.classList.add('active');
+      // mousedown, not click, so the field keeps focus and does not close the list first.
+      li.addEventListener('mousedown', (e) => { e.preventDefault(); pick(o.value); });
+      return li;
+    }));
+    list.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    const target = active >= 0 ? active : shown.findIndex((o) => o.value.toLowerCase() === cur);
+    if (target >= 0) list.children[target]?.scrollIntoView({ block: 'nearest' });
+    if (active >= 0) input.setAttribute('aria-activedescendant', `${id}-${active}`);
+    else input.removeAttribute('aria-activedescendant');
+  };
+  const openAll = () => { showAll = true; typed = false; active = -1; render(); };
+
+  input.addEventListener('focus', () => { openAll(); input.select(); });
+  input.addEventListener('click', () => { if (list.hidden) openAll(); });
+  input.addEventListener('blur', close);
+  input.addEventListener('input', () => { showAll = false; typed = true; active = -1; render(); });
+  arrow.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (!list.hidden && showAll) { close(); return; }
+    input.focus();
+    openAll();
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (list.hidden) { openAll(); return; }
+      const n = shown.length;
+      active = e.key === 'ArrowDown' ? (active + 1) % n : (active <= 0 ? n - 1 : active - 1);
+      render();
+    } else if (e.key === 'Enter') {
+      if (!list.hidden && active >= 0) { e.preventDefault(); pick(shown[active].value); }
+    } else if (e.key === 'Escape') {
+      if (!list.hidden) { e.preventDefault(); close(); }
+    } else if (e.key === 'Tab' && !e.shiftKey) {
+      // Tab after typing takes the first match, the way the list is ordered.
+      if (!typed) { close(); return; }
+      const m = firstMatch(input.value, opts);
+      close();
+      if (m !== undefined && m !== input.value) { input.value = m; input.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
+  });
+
+  const setOptions = (next: ComboOption[]) => {
+    opts = next;
+    if (!list.hidden) render();
+  };
+  const wrap = h('div', { class: 'field' },
+    h('span', { class: 'field-label' }, label),
+    h('div', { class: 'combo' }, input, arrow, list));
+  return { input, setOptions, wrap };
 }
 
 function motorRow(m: MotorEntry, onRemove: () => void): { el: HTMLElement; read: () => MotorEntry } {
