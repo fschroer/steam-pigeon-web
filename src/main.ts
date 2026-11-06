@@ -5,6 +5,8 @@ import { watchUser, signInGoogle, signInEmail, resetPassword, signOut, authMessa
 import { addShare, removeShare, sharesOfRecord, sharedWithMe, normalizeEmail, sharedCsvPath, shareMailto, type Share } from './shares';
 import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, saveLocalCsv, readMeta, savePlace, saveSamples, type RecordInfo } from './store';
 import { lookupPlace, PLACE_ATTRIBUTION } from './place';
+import { detailsSection } from './detailsForm';
+import { deleteDetails } from './details';
 import type { PathPoint } from './kml';
 import { formatRecordTime, recordId, csvFileName, locatorLabel } from './records';
 import { parseFlightCsv, column, stateChanges, type FlightTable } from './csv';
@@ -335,7 +337,8 @@ async function sharedFlightView(ownerUid: string, locatorId: string, recordKey: 
   const subText = (orig?: string) =>
     `${orig ? `${time} · ` : ''}${name} · record ${crc} · shared by ${share?.ownerEmail ?? 'another flyer'}`;
   const sub = h('p', { class: 'muted' }, subText());
-  body.replaceChildren(title, sub, h('div', { class: 'actions' }, csvButton, kmlButton, share ? remove : null));
+  body.replaceChildren(title, sub, h('div', { class: 'actions' }, csvButton, kmlButton, share ? remove : null),
+    detailsSection(ownerUid, locatorId, recordKey, false));
   const meta = readMeta(csvPath);
   void meta.then((m) => { if (m.originalName) { heading.setBase(m.originalName); sub.textContent = subText(m.originalName); } });
   // Only the owner can keep the place on the file, so a recipient just looks it up.
@@ -472,6 +475,7 @@ async function flightView(locatorId: string, id: string) {
       // Its shares would point at nothing; remove them too (best effort).
       try { await Promise.all((await sharesOfRecord(user!.uid, locatorId, recordId(rec))).map((s) => removeShare(s.id))); }
       catch { /* the record is gone, which already closes them */ }
+      await deleteDetails(user!.uid, locatorId, recordId(rec)).catch(() => { /* none, or left behind harmlessly */ });
       flights = null;
       if (rec.csvPath) tableCache.delete(rec.csvPath);
       location.hash = '#/';
@@ -487,7 +491,7 @@ async function flightView(locatorId: string, id: string) {
     body.append(errorBox('This flight has no CSV in the store, so it cannot be charted here. The raw file can still be downloaded.'));
     return;
   }
-  body.append(sharePanel(rec, locatorId));
+  body.append(detailsSection(user!.uid, locatorId, recordId(rec), true), sharePanel(rec, locatorId));
   const csvPath = rec.csvPath;
   await renderFlightData(body, csvPath, kmlButton,
     `${locatorLabel(locatorId, rec.locatorName)}, ${formatRecordTime(rec.recordTs)}`,

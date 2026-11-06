@@ -72,7 +72,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 .narrow { max-width: 380px; }
 .card form { display: grid; gap: 0.75rem; }
 label { display: grid; gap: 0.25rem; font-size: 0.9rem; }
-input[type="email"], input[type="password"] {
+input[type="email"], input[type="password"], input[type="text"], textarea {
   font: inherit; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px;
   background: var(--surface-0); color: var(--text-primary);
 }
@@ -154,3 +154,19 @@ label.check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem
 
 /* The hidden attribute always wins over a display set above. */
 [hidden] { display: none !important; }
+
+/* Flight details. */
+.details { margin: 1rem 0; }
+.details h3 { margin: 1rem 0 0.25rem; font-size: 1rem; }
+.field { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; min-width: 0; }
+.field input, .field textarea { font: inherit; font-size: 0.95rem; width: 100%; box-sizing: border-box; }
+.field.wide { max-width: 48rem; }
+.details-grid { display: grid; gap: 0.6rem 1rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); max-width: 60rem; }
+.motor-row { display: grid; gap: 0.5rem; grid-template-columns: 2fr 1fr 2fr 1fr auto; align-items: end;
+  max-width: 60rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+@media (max-width: 640px) { .motor-row { grid-template-columns: 1fr 1fr; } }
+.notes-log { font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem; white-space: pre-wrap; }
+pre.notes-log { background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; max-width: 48rem; }
+.details-list { display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 1rem; }
+.details-list dt { color: var(--text-secondary); font-weight: 600; }
+.details-list dd { margin: 0; }

@@ -46,6 +46,36 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // Flight details (ADR-0042 amendment "Flight details", 2026-11-06): rocket,
+    // motors, recovery, electronics and a notes log, one document per record,
+    // id {ownerUid}_{locatorId}_{recordKey}. That id is also the start of every
+    // share id for the record, so a recipient's read is one exists() lookup.
+    match /flights/{id} {
+      function isMine() { return request.auth != null && id.split('_')[0] == request.auth.uid; }
+      function sharedWithMe() {
+        return request.auth != null
+          && request.auth.token.get('email_verified', false) == true
+          && request.auth.token.get('email', '') != ''
+          && exists(/databases/$(database)/documents/shares/$(id + '_' + request.auth.token.email.lower()));
+      }
+      function short(d, k, n) { return !(k in d) || (d[k] is string && d[k].size() <= n); }
+      function valid(d) {
+        return d.keys().hasOnly(['ownerUid', 'locatorId', 'recordKey', 'rocketMaker', 'rocketName',
+                                 'motors', 'recovery', 'electronics', 'notes', 'updatedAt'])
+          && d.ownerUid == request.auth.uid
+          && d.locatorId is string && d.recordKey is string
+          && id == d.ownerUid + '_' + d.locatorId + '_' + d.recordKey
+          && short(d, 'rocketMaker', 100) && short(d, 'rocketName', 100)
+          && short(d, 'recovery', 40) && short(d, 'electronics', 500)
+          && short(d, 'notes', 50000)
+          && (!('motors' in d) || (d.motors is list && d.motors.size() <= 8))
+          && d.updatedAt == request.time;
+      }
+      allow read: if isMine() || sharedWithMe();
+      allow create, update: if isMine() && valid(request.resource.data);
+      allow delete: if isMine();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

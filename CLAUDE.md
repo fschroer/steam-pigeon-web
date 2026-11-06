@@ -21,6 +21,7 @@ sharing by link).
 - **`storage.rules` lives here now and is deployed, not pasted** (`firebase deploy --only
   storage`). It guards the whole bucket, the phone app's uploads included. Review a change
   to it like code, and never loosen `users/{uid}` to anything wider without an ADR.
+- **Flight details** (rocket, motors, recovery, electronics, notes log) are Firestore `flights/{ownerUid}_{locatorId}_{recordKey}`, owner-written, readable by anyone holding a share for that record. Motor lists come from ThrustCurve.org; every list is a suggestion on a text field.
 - **Sharing with named people runs on `firestore.rules` + one `storage.rules` match.** A
   share is a Firestore doc whose id (`{ownerUid}_{locatorId}_{recordKey}_{email}`) the
   Storage rule rebuilds from the path and the reader's verified email. Change the id
