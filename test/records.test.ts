@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupRecords, parseObjectName, recordId, csvFileName, recordsPrefix } from '../src/records';
+import { groupRecords, parseObjectName, recordId, csvFileName, recordsPrefix, cleanLabel } from '../src/records';
 
 describe('object names (locator ADR-0040 decision 8)', () => {
   it('parses {record_ts}_{crc}.{bin,csv}', () => {
@@ -75,5 +75,16 @@ describe('fileStem', () => {
     expect(fileStem('C:\\Flights\\Shane.CSV')).toBe('Shane');
     expect(fileStem('  ')).toBeUndefined();
     expect(fileStem(undefined)).toBeUndefined();
+  });
+});
+
+describe('cleanLabel (flight name and place as typed)', () => {
+  it('trims, folds whitespace and caps at 100 characters', () => {
+    expect(cleanLabel('  Red  Ryder\n2nd flight ')).toBe('Red Ryder 2nd flight');
+    expect(cleanLabel('x'.repeat(150))).toHaveLength(100);
+  });
+  it('treats blank as no value', () => {
+    expect(cleanLabel('   ')).toBeUndefined();
+    expect(cleanLabel('')).toBeUndefined();
   });
 });

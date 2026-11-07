@@ -3,12 +3,12 @@ import type { User } from 'firebase/auth';
 import { configured } from './firebase';
 import { watchUser, signInGoogle, signInEmail, resetPassword, signOut, authMessage, sendVerification, refreshUser } from './auth';
 import { addShare, removeShare, sharesOfRecord, sharedWithMe, normalizeEmail, sharedCsvPath, shareMailto, type Share } from './shares';
-import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, saveLocalCsv, readMeta, savePlace, saveSamples, type RecordInfo } from './store';
+import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, saveLocalCsv, readMeta, savePlace, saveSamples, saveNameAndPlace, type RecordInfo } from './store';
 import { lookupPlace, PLACE_ATTRIBUTION } from './place';
 import { detailsSection } from './detailsForm';
 import { deleteDetails } from './details';
 import type { PathPoint } from './kml';
-import { formatRecordTime, recordId, csvFileName, locatorLabel } from './records';
+import { formatRecordTime, recordId, csvFileName, locatorLabel, cleanLabel } from './records';
 import { parseFlightCsv, column, stateChanges, type FlightTable } from './csv';
 import { flightPath, buildKml } from './kml';
 import { MAPS_KEY, padElevationM, flightCamera, showFlight3D } from './map3d';
@@ -173,7 +173,7 @@ async function listView() {
     const rows = recs.map((r) => {
       const samples = h('td', { class: 'num' }, r.samples !== undefined ? r.samples.toLocaleString() : '…');
       const place = h('td', {}, r.place ?? '');
-      const flight = flightCell(`#/flight/${locatorId}/${recordId(r)}`, r.recordTs, () => r.originalName);
+      const flight = flightCell(`#/flight/${locatorId}/${recordId(r)}`, r.recordTs, () => r.title ?? r.originalName);
       noteName(r);
       const needPlace = () => {
         if (r.csvPath && (!r.place || r.samples === undefined)) queueBackfill(r, place, samples);
@@ -246,7 +246,7 @@ function sharedSection(): HTMLElement {
       const place = h('td', {});
       let original: string | undefined;
       const flight = flightCell(`#/shared/${s.ownerUid}/${s.locatorId}/${s.recordKey}`, Number(ts), () => original);
-      void readMeta(sharedCsvPath(s)).then((m) => { place.textContent = m.place ?? ''; original = m.originalName; flight.fill(); });
+      void readMeta(sharedCsvPath(s)).then((m) => { place.textContent = m.place ?? ''; original = m.title ?? m.originalName; flight.fill(); });
       return h('tr', {},
         flight.cell,
         place,
@@ -356,7 +356,10 @@ async function sharedFlightView(ownerUid: string, locatorId: string, recordKey: 
   body.replaceChildren(title, sub, h('div', { class: 'actions' }, csvButton, kmlButton, share ? remove : null),
     detailsSection(ownerUid, locatorId, recordKey, false));
   const meta = readMeta(csvPath);
-  void meta.then((m) => { if (m.originalName) { heading.setBase(m.originalName); sub.textContent = subText(m.originalName); } });
+  void meta.then((m) => {
+    const n = m.title ?? m.originalName;
+    if (n) { heading.setBase(n); sub.textContent = subText(n); }
+  });
   // Only the owner can keep the place on the file, so a recipient just looks it up.
   await renderFlightData(body, csvPath, kmlButton, `${name}, ${time}`, `${fileBase}.kml`,
     'Could not open this flight. The owner may have stopped sharing it or deleted it',
@@ -439,19 +442,32 @@ async function flightView(locatorId: string, id: string) {
 
   const time = formatRecordTime(rec.recordTs);
   const title = h('h1', {});
-  const heading = titleControl(title, rec.originalName ?? time);
-  // A CSV saved from the computer is titled by its file name, with the time below.
+  // Titled by the name the owner gave it, else a computer-saved CSV's file
+  // name, else the flight time; a name puts the time in the line below.
+  const named = () => rec.title ?? rec.originalName;
+  const heading = titleControl(title, named() ?? time);
   const subText = () =>
-    `${rec.originalName ? `${time} · ` : ''}${locatorLabel(locatorId, rec.locatorName)} · record ${rec.crc}`;
+    `${named() ? `${time} · ` : ''}${locatorLabel(locatorId, rec.locatorName)} · record ${rec.crc}`;
   const sub = h('p', { class: 'muted' }, subText());
+  const refreshTitle = () => { heading.setBase(named() ?? time); sub.textContent = subText(); };
   if (!('sizeBytes' in rec)) {
     loadInfo(rec).then((info) => {
       Object.assign(rec, info);
-      sub.textContent = subText();
-      if (rec.originalName) heading.setBase(rec.originalName);
+      refreshTitle();
     }).catch(() => { /* the id alone is still correct */ });
   }
   const actions = h('div', { class: 'actions' });
+  if (rec.csvPath) {
+    const b = h('button', { type: 'button' }, 'Edit name and place');
+    b.addEventListener('click', () => {
+      if (sub.nextElementSibling?.classList.contains('rename')) return;
+      sub.after(renameForm(rec, time, () => {
+        refreshTitle();
+        heading.setPlace(rec.place ?? '');
+      }));
+    });
+    actions.append(b);
+  }
   if (rec.csvPath) {
     const b = h('button', { type: 'button', class: 'primary' }, 'Download CSV');
     b.addEventListener('click', () => download(rec.csvPath!, csvFileName(rec), b));
@@ -510,10 +526,13 @@ async function flightView(locatorId: string, id: string) {
   body.append(detailsSection(user!.uid, locatorId, recordId(rec), true), sharePanel(rec, locatorId));
   const csvPath = rec.csvPath;
   await renderFlightData(body, csvPath, kmlButton,
-    `${locatorLabel(locatorId, rec.locatorName)}, ${formatRecordTime(rec.recordTs)}`,
+    rec.title ?? `${locatorLabel(locatorId, rec.locatorName)}, ${formatRecordTime(rec.recordTs)}`,
     csvFileName(rec).replace(/\.csv$/, '.kml'), 'Could not load the CSV', {
       known: async () => (await loadInfo(rec).catch(() => rec as RecordInfo)).place,
-      save: async (p) => { await savePlace(csvPath, p); rec.place = p; },
+      save: async (p) => {
+        if (rec.place) return;   // named by hand while the lookup ran
+        await savePlace(csvPath, p); rec.place = p;
+      },
       onTable: (t) => {
         if (rec.samples !== undefined) return;
         rec.samples = t.rows;
@@ -565,21 +584,61 @@ function placeShower(title: ReturnType<typeof titleControl>, after: HTMLElement)
 }
 
 /**
- * The Flight cell of a list row: the time, or for a CSV saved from the computer
- * its file name with the time below. Call fill() again once the name may be known.
+ * The Flight cell of a list row: the time, or the flight's name (one the owner
+ * gave it, or a computer-saved CSV's file name) with the time below. Call
+ * fill() again once the name may be known.
  */
-function flightCell(href: string, recordTs: number, originalName: () => string | undefined):
+function flightCell(href: string, recordTs: number, name: () => string | undefined):
   { cell: HTMLElement; fill: () => void } {
-  const link = h('a', { href }, formatRecordTime(recordTs));
+  const time = formatRecordTime(recordTs);
+  const link = h('a', { href }, time);
+  const below = h('div', { class: 'muted small' }, time);
   const cell = h('td', {}, link);
   const fill = () => {
-    const n = originalName();
-    if (!n || cell.childNodes.length > 1) return;
-    link.textContent = n;
-    cell.append(h('div', { class: 'muted small' }, formatRecordTime(recordTs)));
+    const n = name();
+    link.textContent = n ?? time;
+    if (n) cell.append(below); else below.remove();
   };
   fill();
   return { cell, fill };
+}
+
+/**
+ * The owner's form for the flight's name and place, kept on the CSV
+ * (saveNameAndPlace). Blank goes back to the default: the time (or the saved
+ * file's name), and a place looked up from the pad's GPS fix.
+ */
+function renameForm(rec: RecordInfo, time: string, done: () => void): HTMLElement {
+  const name = h('input', { type: 'text', maxlength: '100', value: rec.title ?? '', placeholder: rec.originalName ?? time });
+  const place = h('input', { type: 'text', maxlength: '100', value: rec.place ?? '', placeholder: 'Looked up from the GPS fix' });
+  const save = h('button', { type: 'submit', class: 'primary' }, 'Save');
+  const cancel = h('button', { type: 'button', class: 'link' }, 'Cancel');
+  const status = h('p', { class: 'muted small', 'aria-live': 'polite' },
+    'Shown on the flight list and here, and to people you share it with. Leave a field blank for the default; a blank place is looked up again the next time the flight opens.');
+  const form = h('form', { class: 'rename' },
+    h('label', {}, 'Name', name),
+    h('label', {}, 'Place', place),
+    h('div', { class: 'actions' }, save, cancel),
+    status);
+  cancel.addEventListener('click', () => form.remove());
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = cleanLabel(name.value);
+    const where = cleanLabel(place.value);
+    save.disabled = true;
+    try {
+      await saveNameAndPlace(rec.csvPath!, title, where);
+      rec.title = title;
+      rec.place = where;
+      form.remove();
+      done();
+    } catch (err) {
+      status.textContent = `Could not save: ${(err as Error).message}`;
+      save.disabled = false;
+    }
+  });
+  queueMicrotask(() => name.focus());
+  return form;
 }
 
 /** Loads a stored CSV and adds the 3D view and charts below [body]. */
