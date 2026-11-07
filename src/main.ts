@@ -3,7 +3,7 @@ import type { User } from 'firebase/auth';
 import { configured } from './firebase';
 import { watchUser, signInGoogle, signInEmail, resetPassword, signOut, authMessage, sendVerification, refreshUser } from './auth';
 import { addShare, removeShare, sharesOfRecord, sharedWithMe, normalizeEmail, sharedCsvPath, shareMailto, type Share } from './shares';
-import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, saveLocalCsv, readMeta, savePlace, saveSamples, saveNameAndPlace, type RecordInfo } from './store';
+import { listFlights, loadInfo, fetchCsvText, fetchBlob, shareLink, deleteRecord, saveLocalCsv, readMeta, savePlace, saveSamples, saveLabels, type RecordInfo } from './store';
 import { lookupPlace, PLACE_ATTRIBUTION } from './place';
 import { detailsSection } from './detailsForm';
 import { deleteDetails } from './details';
@@ -173,6 +173,7 @@ async function listView() {
     const rows = recs.map((r) => {
       const samples = h('td', { class: 'num' }, r.samples !== undefined ? r.samples.toLocaleString() : '…');
       const place = h('td', {}, r.place ?? '');
+      const event = h('td', {}, r.event ?? '');
       const flight = flightCell(`#/flight/${locatorId}/${recordId(r)}`, r.recordTs, () => r.title ?? r.originalName);
       noteName(r);
       const needPlace = () => {
@@ -183,6 +184,7 @@ async function listView() {
           Object.assign(r, info);
           samples.textContent = info.samples !== undefined ? info.samples.toLocaleString() : '–';
           place.textContent = info.place ?? '';
+          event.textContent = info.event ?? '';
           flight.fill();
           noteName(r);
           needPlace();
@@ -192,6 +194,7 @@ async function listView() {
       return h('tr', {},
         flight.cell,
         place,
+        event,
         samples,
         h('td', { class: 'muted' }, files),
       );
@@ -201,6 +204,7 @@ async function listView() {
       h('table', {},
         h('thead', {}, h('tr', {},
           h('th', {}, 'Flight'), h('th', { title: 'Named the first time the flight is opened' }, 'Place'),
+          h('th', {}, 'Event'),
           h('th', { class: 'num' }, 'Samples'), h('th', {}, 'Files'))),
         h('tbody', {}, ...rows),
       ),
@@ -244,19 +248,21 @@ function sharedSection(): HTMLElement {
     const rows = items.map((s) => {
       const [ts, crc] = s.recordKey.split('_');
       const place = h('td', {});
+      const event = h('td', {});
       let original: string | undefined;
       const flight = flightCell(`#/shared/${s.ownerUid}/${s.locatorId}/${s.recordKey}`, Number(ts), () => original);
-      void readMeta(sharedCsvPath(s)).then((m) => { place.textContent = m.place ?? ''; original = m.title ?? m.originalName; flight.fill(); });
+      void readMeta(sharedCsvPath(s)).then((m) => { place.textContent = m.place ?? ''; event.textContent = m.event ?? ''; original = m.title ?? m.originalName; flight.fill(); });
       return h('tr', {},
         flight.cell,
         place,
+        event,
         h('td', {}, locatorLabel(s.locatorId, s.locatorName)),
         h('td', { class: 'muted' }, s.ownerEmail ?? 'unknown owner'),
         h('td', { class: 'muted' }, crc),
       );
     });
     list.replaceWith(h('table', {},
-      h('thead', {}, h('tr', {}, h('th', {}, 'Flight'), h('th', {}, 'Place'), h('th', {}, 'Locator'), h('th', {}, 'Shared by'), h('th', {}, 'Record'))),
+      h('thead', {}, h('tr', {}, h('th', {}, 'Flight'), h('th', {}, 'Place'), h('th', {}, 'Event'), h('th', {}, 'Locator'), h('th', {}, 'Shared by'), h('th', {}, 'Record'))),
       h('tbody', {}, ...rows)));
   }).catch((err) => { list.replaceWith(errorBox(`Could not list shared flights: ${(err as Error).message}`)); });
   return section;
@@ -359,6 +365,7 @@ async function sharedFlightView(ownerUid: string, locatorId: string, recordKey: 
   void meta.then((m) => {
     const n = m.title ?? m.originalName;
     if (n) { heading.setBase(n); sub.textContent = subText(n); }
+    if (m.event) heading.setEvent(m.event);
   });
   // Only the owner can keep the place on the file, so a recipient just looks it up.
   await renderFlightData(body, csvPath, kmlButton, `${name}, ${time}`, `${fileBase}.kml`,
@@ -449,7 +456,8 @@ async function flightView(locatorId: string, id: string) {
   const subText = () =>
     `${named() ? `${time} · ` : ''}${locatorLabel(locatorId, rec.locatorName)} · record ${rec.crc}`;
   const sub = h('p', { class: 'muted' }, subText());
-  const refreshTitle = () => { heading.setBase(named() ?? time); sub.textContent = subText(); };
+  const refreshTitle = () => { heading.setBase(named() ?? time); heading.setEvent(rec.event ?? ''); sub.textContent = subText(); };
+  refreshTitle();
   if (!('sizeBytes' in rec)) {
     loadInfo(rec).then((info) => {
       Object.assign(rec, info);
@@ -458,7 +466,7 @@ async function flightView(locatorId: string, id: string) {
   }
   const actions = h('div', { class: 'actions' });
   if (rec.csvPath) {
-    const b = h('button', { type: 'button' }, 'Edit name and place');
+    const b = h('button', { type: 'button' }, 'Edit name, place and event');
     b.addEventListener('click', () => {
       if (sub.nextElementSibling?.classList.contains('rename')) return;
       sub.after(renameForm(rec, time, () => {
@@ -562,15 +570,17 @@ async function resolvePlace(path: PathPoint[], hooks: PlaceHooks) {
   if (place) hooks.show(place);
 }
 
-/** A page title made of a base (the flight time, or a saved file's name) and, once known, the place. */
+/** A page title: a base (the given name, saved file's name or flight time), then the place and the event once known. */
 function titleControl(el: HTMLElement, base: string) {
   let b = base;
   let p: string | undefined;
-  const render = () => { el.textContent = p ? `${b} · ${p}` : b; };
+  let e: string | undefined;
+  const render = () => { el.textContent = [b, p, e].filter(Boolean).join(' · '); };
   render();
   return {
     setBase(x: string) { b = x; render(); },
     setPlace(x: string) { p = x; render(); },
+    setEvent(x: string) { e = x; render(); },
   };
 }
 
@@ -604,13 +614,14 @@ function flightCell(href: string, recordTs: number, name: () => string | undefin
 }
 
 /**
- * The owner's form for the flight's name and place, kept on the CSV
- * (saveNameAndPlace). Blank goes back to the default: the time (or the saved
+ * The owner's form for the flight's name, place and event, kept on the CSV
+ * (saveLabels). Blank goes back to the default: the time (or the saved
  * file's name), and a place looked up from the pad's GPS fix.
  */
 function renameForm(rec: RecordInfo, time: string, done: () => void): HTMLElement {
   const name = h('input', { type: 'text', maxlength: '100', value: rec.title ?? '', placeholder: rec.originalName ?? time });
   const place = h('input', { type: 'text', maxlength: '100', value: rec.place ?? '', placeholder: 'Looked up from the GPS fix' });
+  const event = h('input', { type: 'text', maxlength: '100', value: rec.event ?? '', placeholder: 'e.g. LDRS 44' });
   const save = h('button', { type: 'submit', class: 'primary' }, 'Save');
   const cancel = h('button', { type: 'button', class: 'link' }, 'Cancel');
   const status = h('p', { class: 'muted small', 'aria-live': 'polite' },
@@ -618,6 +629,7 @@ function renameForm(rec: RecordInfo, time: string, done: () => void): HTMLElemen
   const form = h('form', { class: 'rename' },
     h('label', {}, 'Name', name),
     h('label', {}, 'Place', place),
+    h('label', {}, 'Event', event),
     h('div', { class: 'actions' }, save, cancel),
     status);
   cancel.addEventListener('click', () => form.remove());
@@ -625,11 +637,13 @@ function renameForm(rec: RecordInfo, time: string, done: () => void): HTMLElemen
     e.preventDefault();
     const title = cleanLabel(name.value);
     const where = cleanLabel(place.value);
+    const what = cleanLabel(event.value);
     save.disabled = true;
     try {
-      await saveNameAndPlace(rec.csvPath!, title, where);
+      await saveLabels(rec.csvPath!, { title, place: where, event: what });
       rec.title = title;
       rec.place = where;
+      rec.event = what;
       form.remove();
       done();
     } catch (err) {

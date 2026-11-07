@@ -13,6 +13,8 @@ export interface RecordInfo extends RecordRef {
   originalName?: string;
   /** A name the owner gave the flight on the flight page; shown in place of the default. */
   title?: string;
+  /** The launch event the owner named, such as "LDRS 44". */
+  event?: string;
   sizeBytes?: number;
 }
 
@@ -40,7 +42,7 @@ export async function loadInfo(r: RecordRef): Promise<RecordInfo> {
   const m = await getMetadata(ref(storage(), path));
   const c = m.customMetadata ?? {};
   const num = (s?: string) => (s !== undefined && s !== '' && Number.isFinite(Number(s)) ? Number(s) : undefined);
-  return { ...r, samples: num(c.samples), slot: num(c.slot), sizeBytes: m.size, locatorName: c.locator_name?.trim() || undefined, place: c.place?.trim() || undefined, originalName: fileStem(c.original_name), title: c.title?.trim() || undefined };
+  return { ...r, samples: num(c.samples), slot: num(c.slot), sizeBytes: m.size, locatorName: c.locator_name?.trim() || undefined, place: c.place?.trim() || undefined, originalName: fileStem(c.original_name), title: c.title?.trim() || undefined, event: c.event?.trim() || undefined };
 }
 
 export async function fetchCsvText(path: string): Promise<string> {
@@ -112,10 +114,10 @@ export function fileStem(name?: string): string | undefined {
 }
 
 /** The kept place, given name and original file name of any readable CSV (the owner's, or one shared with this user). */
-export async function readMeta(path: string): Promise<{ place?: string; originalName?: string; title?: string }> {
+export async function readMeta(path: string): Promise<{ place?: string; originalName?: string; title?: string; event?: string }> {
   try {
     const c = (await getMetadata(ref(storage(), path))).customMetadata ?? {};
-    return { place: c.place?.trim() || undefined, originalName: fileStem(c.original_name), title: c.title?.trim() || undefined };
+    return { place: c.place?.trim() || undefined, originalName: fileStem(c.original_name), title: c.title?.trim() || undefined, event: c.event?.trim() || undefined };
   } catch {
     return {};
   }
@@ -127,14 +129,17 @@ export async function savePlace(path: string, place: string): Promise<void> {
 }
 
 /**
- * The owner's own name and place for a flight, kept on its CSV as `title` and
- * `place`. A blank value removes the key, so the flight goes back to its
- * default name, and its place is looked up again the next time it is opened.
+ * The owner's own name, place and event for a flight, kept on its CSV as
+ * `title`, `place` and `event`. A blank value removes the key, so the flight
+ * goes back to its default name, its place is looked up again the next time it
+ * is opened, and it has no event.
  */
-export async function saveNameAndPlace(path: string, title: string | undefined, place: string | undefined): Promise<void> {
+export async function saveLabels(path: string, labels: { title?: string; place?: string; event?: string }): Promise<void> {
   // Storage deletes a custom metadata key whose value is null.
   const value = (v: string | undefined) => (v ? v : null) as unknown as string;
-  await updateMetadata(ref(storage(), path), { customMetadata: { title: value(title), place: value(place) } });
+  await updateMetadata(ref(storage(), path), {
+    customMetadata: { title: value(labels.title), place: value(labels.place), event: value(labels.event) },
+  });
 }
 
 /**
