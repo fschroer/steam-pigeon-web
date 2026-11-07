@@ -7,6 +7,7 @@
   --border: #dcdbd6;
   --grid: #e6e5e0;
   --marker: #8a8984;
+  --placeholder: #9a9992;
   --accent: #2a78d6;
   --accent-ink: #ffffff;
   --error: #b42323;
@@ -21,6 +22,7 @@
     --border: #383835;
     --grid: #2c2c2a;
     --marker: #8f8e88;
+    --placeholder: #6e6d68;
     --accent: #3987e5;
     --accent-ink: #ffffff;
     --error: #f07272;
@@ -35,6 +37,7 @@
   --border: #383835;
   --grid: #2c2c2a;
   --marker: #8f8e88;
+  --placeholder: #6e6d68;
   --accent: #3987e5;
   --accent-ink: #ffffff;
   --error: #f07272;
@@ -76,6 +79,9 @@ input[type="email"], input[type="password"], input[type="text"], textarea {
   font: inherit; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px;
   background: var(--surface-0); color: var(--text-primary);
 }
+/* Hint text in an empty field: lighter and italic, so it never reads as a
+   value someone typed (Frank, 2026-11-07). */
+::placeholder { color: var(--placeholder); font-style: italic; opacity: 1; }
 .or { text-align: center; color: var(--text-secondary); margin: 0.75rem 0; font-size: 0.85rem; }
 
 /* One button color: every action is blue (Frank, 2026-11-07). Delete keeps
