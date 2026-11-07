@@ -181,10 +181,80 @@ export function panelChart(host: HTMLElement, input: PanelChartInput): uPlot {
   tip.style.display = 'none';
   u.over.append(tip);
   (u as uPlot & { _tip?: HTMLElement })._tip = tip;
+  attachTouch(u, x);
   const ro = new ResizeObserver(() => u.setSize({ width: Math.max(280, host.clientWidth), height: HEIGHT }));
   ro.observe(host);
   (u as uPlot & { _ro?: ResizeObserver })._ro = ro;
   return u;
+}
+
+/**
+ * Touch on a phone or tablet (Frank, 2026-11-07), where drag-to-zoom and
+ * double-click need a mouse:
+ * - one finger moves the cursor line (and with it the readout and the synced
+ *   panels); a mostly vertical swipe still scrolls the page;
+ * - two fingers pinch the time axis in or out about the fingers, and pan it;
+ *   the other panels follow through the setScale hook;
+ * - a double tap goes back to the whole flight.
+ */
+function attachTouch(u: uPlot, x: number[]) {
+  const over = u.over;
+  // Vertical pans stay with the browser; horizontal moves and pinches come here.
+  over.style.touchAction = 'pan-y';
+  let lo = Infinity, hi = -Infinity;
+  for (const v of x) if (Number.isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  if (!(hi > lo)) return;
+  const full = () => u.setScale('x', { min: lo, max: hi });
+
+  const localX = (t: Touch) => t.clientX - over.getBoundingClientRect().left;
+  const localY = (t: Touch) => t.clientY - over.getBoundingClientRect().top;
+  let pinch: { v1: number; v2: number } | null = null;
+  let lastTap = 0;
+
+  const moveCursor = (t: Touch) => {
+    const left = Math.min(Math.max(0, localX(t)), over.clientWidth);
+    // The third argument publishes to the synced panels, as a mouse move does
+    // (uPlot takes it; its typings stop at two).
+    (u.setCursor as (o: { left: number; top: number }, fire?: boolean, pub?: boolean) => void)(
+      { left, top: Math.min(Math.max(0, localY(t)), over.clientHeight) }, true, true);
+  };
+
+  over.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const [a, b] = [e.touches[0], e.touches[1]];
+      pinch = { v1: u.posToVal(localX(a), 'x'), v2: u.posToVal(localX(b), 'x') };
+      if (Math.abs(pinch.v2 - pinch.v1) < 1e-9) pinch = null;
+    } else if (e.touches.length === 1) {
+      pinch = null;
+      moveCursor(e.touches[0]);
+    }
+  }, { passive: false });
+
+  over.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && pinch) {
+      e.preventDefault();
+      const p1 = localX(e.touches[0]), p2 = localX(e.touches[1]);
+      if (Math.abs(p2 - p1) < 10) return;
+      // Keep the times first touched under the two fingers.
+      const perVal = (p2 - p1) / (pinch.v2 - pinch.v1);
+      let min = pinch.v1 - p1 / perVal;
+      let max = min + over.clientWidth / perVal;
+      if (max - min >= hi - lo) { min = lo; max = hi; }
+      else if (min < lo) { max += lo - min; min = lo; }
+      else if (max > hi) { min -= max - hi; max = hi; }
+      if (max - min > 1e-3) u.setScale('x', { min, max });
+    } else if (e.touches.length === 1 && !pinch) {
+      moveCursor(e.touches[0]);
+    }
+  }, { passive: false });
+
+  over.addEventListener('touchend', (e) => {
+    if (e.touches.length > 0) return;
+    if (pinch) { pinch = null; return; }
+    const now = Date.now();
+    if (now - lastTap < 300) { full(); lastTap = 0; } else lastTap = now;
+  });
 }
 
 export function destroyChart(u: uPlot): void {

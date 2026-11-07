@@ -76,7 +76,7 @@ export function renderCharts(body: HTMLElement, table: FlightTable) {
     ));
   }
   body.append(h('p', { class: 'muted small' },
-    `${table.rows.toLocaleString()} samples. Drag across a chart to zoom; double-click to reset.`), picker, chartsHost, events);
+    `${table.rows.toLocaleString()} samples. Drag across a chart to zoom and double-click to reset; on a phone, pinch to zoom, drag a finger to move the cursor and double-tap to reset.`), picker, chartsHost, events);
 
   let syncing = false;
   function draw() {

@@ -78,13 +78,15 @@ input[type="email"], input[type="password"], input[type="text"], textarea {
 }
 .or { text-align: center; color: var(--text-secondary); margin: 0.75rem 0; font-size: 0.85rem; }
 
+/* One button color: every action is blue (Frank, 2026-11-07). Delete keeps
+   its red outline so a destructive action never looks like the others, and
+   "Sign in with Google" keeps the neutral look Google's branding asks for. */
 button {
   font: inherit; padding: 0.45rem 0.9rem; border-radius: 6px; cursor: pointer;
-  border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink);
 }
 button:disabled { opacity: 0.6; cursor: default; }
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-button.google { width: 100%; }
+button.google { width: 100%; border-color: var(--border); background: var(--surface-1); color: var(--text-primary); }
 button.danger { color: var(--error); border-color: var(--error); background: none; margin-left: auto; }
 button.link { border: none; background: none; color: var(--accent); padding: 0.25rem 0; }
 .status { min-height: 1.4em; color: var(--text-secondary); }
