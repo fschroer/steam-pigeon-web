@@ -103,3 +103,9 @@ export function crc32Hex(text: string): string {
   }
   return ((~c) >>> 0).toString(16).padStart(8, '0');
 }
+
+/** A flight name or place as typed: one line, trimmed, at most 100 characters; undefined when blank. */
+export function cleanLabel(s: string): string | undefined {
+  const t = s.replace(/\s+/g, ' ').trim().slice(0, 100).trim();
+  return t || undefined;
+}

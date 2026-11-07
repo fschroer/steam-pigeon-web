@@ -7,6 +7,7 @@
   --border: #dcdbd6;
   --grid: #e6e5e0;
   --marker: #8a8984;
+  --placeholder: #9a9992;
   --accent: #2a78d6;
   --accent-ink: #ffffff;
   --error: #b42323;
@@ -21,6 +22,7 @@
     --border: #383835;
     --grid: #2c2c2a;
     --marker: #8f8e88;
+    --placeholder: #6e6d68;
     --accent: #3987e5;
     --accent-ink: #ffffff;
     --error: #f07272;
@@ -35,6 +37,7 @@
   --border: #383835;
   --grid: #2c2c2a;
   --marker: #8f8e88;
+  --placeholder: #6e6d68;
   --accent: #3987e5;
   --accent-ink: #ffffff;
   --error: #f07272;
@@ -76,15 +79,20 @@ input[type="email"], input[type="password"], input[type="text"], textarea {
   font: inherit; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px;
   background: var(--surface-0); color: var(--text-primary);
 }
+/* Hint text in an empty field: lighter and italic, so it never reads as a
+   value someone typed (Frank, 2026-11-07). */
+::placeholder { color: var(--placeholder); font-style: italic; opacity: 1; }
 .or { text-align: center; color: var(--text-secondary); margin: 0.75rem 0; font-size: 0.85rem; }
 
+/* One button color: every action is blue (Frank, 2026-11-07). Delete keeps
+   its red outline so a destructive action never looks like the others, and
+   "Sign in with Google" keeps the neutral look Google's branding asks for. */
 button {
   font: inherit; padding: 0.45rem 0.9rem; border-radius: 6px; cursor: pointer;
-  border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink);
 }
 button:disabled { opacity: 0.6; cursor: default; }
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-button.google { width: 100%; }
+button.google { width: 100%; border-color: var(--border); background: var(--surface-1); color: var(--text-primary); }
 button.danger { color: var(--error); border-color: var(--error); background: none; margin-left: auto; }
 button.link { border: none; background: none; color: var(--accent); padding: 0.25rem 0; }
 .status { min-height: 1.4em; color: var(--text-secondary); }
@@ -187,3 +195,9 @@ pre.notes-log { background: var(--surface-1); border: 1px solid var(--border); b
 .elec-row { display: grid; grid-template-columns: minmax(0, 24rem) max-content; justify-content: start; gap: 0.75rem; align-items: end; padding: 0.2rem 0; }
 .elec-row > button, .motor-row > button { justify-self: start; }
 .save-status { font-weight: normal; margin-left: 0.5rem; }
+
+/* The owner's name-and-place form on the flight page. */
+.rename { display: grid; gap: 0.6rem; max-width: 32rem; margin: 0.5rem 0 1rem;
+  padding: 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); }
+.rename .actions { margin: 0; }
+.rename p { margin: 0; }

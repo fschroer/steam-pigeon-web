@@ -1,7 +1,7 @@
 import type uPlot from 'uplot';
 import { h } from './dom';
 import { column, stateChanges, type FlightTable } from './csv';
-import { PANELS, DEFAULT_SELECTION, flightStateName } from './channels';
+import { PANELS, DEFAULT_SELECTION, flightStateName, flightStateAbbr } from './channels';
 import { panelChart, destroyChart, seriesColor } from './chart';
 import { currentUnits, panelUnits } from './units';
 
@@ -71,18 +71,17 @@ export function renderCharts(body: HTMLElement, table: FlightTable) {
   const events = h('section', { class: 'events' });
   if (markers.length) {
     events.append(h('h2', {}, 'Flight events'), h('table', {},
-      h('thead', {}, h('tr', {}, h('th', {}, 'Event'), h('th', { class: 'num' }, 'Time (s)'))),
-      h('tbody', {}, ...markers.map((m) => h('tr', {}, h('td', {}, flightStateName(m.state)), h('td', { class: 'num' }, m.t.toFixed(2))))),
+      h('thead', {}, h('tr', {}, h('th', {}, 'Tag'), h('th', {}, 'Event'), h('th', { class: 'num' }, 'Time (s)'))),
+      h('tbody', {}, ...markers.map((m) => h('tr', {}, h('td', {}, flightStateAbbr(m.state)), h('td', {}, flightStateName(m.state)), h('td', { class: 'num' }, m.t.toFixed(2))))),
     ));
   }
   body.append(h('p', { class: 'muted small' },
-    `${table.rows.toLocaleString()} samples. Drag across a chart to zoom; double-click to reset.`), picker, chartsHost, events);
+    `${table.rows.toLocaleString()} samples. Drag across a chart to zoom and double-click to reset; on a phone, pinch to zoom, drag a finger to move the cursor and double-tap to reset.`), picker, chartsHost, events);
 
   let syncing = false;
   function draw() {
     disposeCharts();
     chartsHost.replaceChildren();
-    let first = true;
     for (const { panel, slots } of available) {
       const chosen = slots.filter((s) => selection.has(panel.columns[s]));
       if (!chosen.length) continue;
@@ -97,7 +96,6 @@ export function renderCharts(body: HTMLElement, table: FlightTable) {
           slot, data: column(table, panel.columns[slot])!.map((v) => (v === null ? null : convert(v))),
         })),
         markers,
-        labelMarkers: first,
         onZoom: (min, max) => {
           if (syncing) return;
           syncing = true;
@@ -106,7 +104,6 @@ export function renderCharts(body: HTMLElement, table: FlightTable) {
         },
       });
       charts.push(u);
-      first = false;
     }
     if (!charts.length) chartsHost.append(h('p', { class: 'muted' }, 'Pick a series above to chart it.'));
   }
